@@ -13,8 +13,8 @@ interface AuthUser {
  * Get the current authenticated user from cookies
  * @returns AuthUser if authenticated, null otherwise
  */
-export function getAuthUser(): AuthUser | null {
-  const cookieStore = cookies();
+export async function getAuthUser(): Promise<AuthUser | null> {
+  const cookieStore = await cookies();
   const token = cookieStore.get('access_token')?.value;
 
   if (!token) return null;

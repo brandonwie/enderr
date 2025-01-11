@@ -10,7 +10,7 @@ export interface User {
   /** User's full name from Google OAuth */
   name: string;
   /** URL to user's profile image from Google OAuth */
-  profileImage: string;
+  picture: string;
   /** Timestamp when the user was created */
   createdAt: Date;
   /** Timestamp when the user was last updated */
@@ -21,4 +21,4 @@ export interface User {
  * Represents the minimal user information needed for display
  * @remarks Used when we don't need the full user object
  */
-export type UserBasicInfo = Pick<User, "id" | "name" | "profileImage">;
+export type UserBasicInfo = Pick<User, "id" | "name" | "picture">;

@@ -18,7 +18,7 @@ model User {
   id            String     @id @default(uuid())
   email         String     @unique
   name          String
-  profileImage  String?
+  picture       String?
   schedules     Schedule[] @relation("CreatedSchedules")
   participating Schedule[] @relation("ParticipatingSchedules")
   createdNotes  Note[]     @relation("CreatedNotes")

@@ -119,7 +119,7 @@ export class AuthService {
       data: {
         email: payload.email,
         name: payload.name,
-        profileImage: payload.picture,
+        picture: payload.picture,
       },
     });
 
