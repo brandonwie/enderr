@@ -3,6 +3,19 @@
   "collection": "@nestjs/schematics",
   "sourceRoot": "src",
   "compilerOptions": {
-    "deleteOutDir": true
+    "deleteOutDir": true,
+    "webpack": true,
+    "tsConfigPath": "tsconfig.json"
+  },
+  "projects": {
+    "shared": {
+      "type": "library",
+      "root": "../shared",
+      "entryFile": "index",
+      "sourceRoot": "../shared",
+      "compilerOptions": {
+        "tsConfigPath": "../shared/tsconfig.json"
+      }
+    }
   }
 }

@@ -19,45 +19,39 @@ model User {
   email         String     @unique
   name          String
   profileImage  String?
-  schedules     Schedule[]
-  tags          Tag[]
+  schedules     Schedule[] @relation("CreatedSchedules")
+  participating Schedule[] @relation("ParticipatingSchedules")
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
   @@map("users")
 }
 
+// Schedule status enum
+enum ScheduleStatus {
+  INBOX
+  SCHEDULED
+  COMPLETED
+}
+
 // Schedule model
 model Schedule {
-  id          String    @id @default(uuid())
+  id          String        @id @default(uuid())
   title       String
   description String?
   startTime   DateTime?
   endTime     DateTime?
+  duration    Int          // Duration in minutes
+  status      ScheduleStatus
   location    String?
-  meetingLink String?
-  isInbox     Boolean   @default(false)
-  user        User      @relation(fields: [userId], references: [id])
-  userId      String
-  tags        Tag[]
+  creator     User         @relation("CreatedSchedules", fields: [creatorId], references: [id])
+  creatorId   String
+  participants User[]      @relation("ParticipatingSchedules")
   notes       Note[]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 
   @@map("schedules")
-}
-
-// Tag model
-model Tag {
-  id        String     @id @default(uuid())
-  name      String
-  color     String     @db.Char(7) // Hex color code
-  user      User       @relation(fields: [userId], references: [id])
-  userId    String
-  schedules Schedule[]
-  createdAt DateTime   @default(now())
-
-  @@map("tags")
 }
 
 // Note model
