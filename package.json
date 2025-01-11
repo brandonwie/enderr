@@ -1,0 +1,17 @@
+{
+  "name": "enderr",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"pnpm react:dev\" \"pnpm nest:dev\"",
+    "react:dev": "pnpm --filter @enderr/react dev",
+    "nest:dev": "pnpm --filter @enderr/nest dev",
+    "test": "pnpm -r test",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "type-check": "pnpm -r type-check"
+  },
+  "devDependencies": {
+    "concurrently": "latest",
+    "typescript": "latest"
+  }
+}

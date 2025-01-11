@@ -1,0 +1,4 @@
+packages:
+  - "enderr-react"
+  - "enderr-nest"
+  - "shared"

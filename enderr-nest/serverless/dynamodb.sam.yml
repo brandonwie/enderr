@@ -1,0 +1,88 @@
+# SAM template version declaration
+# NOTE: These two lines are required for SAM templates
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31 # Enables SAM functionality
+
+# NOTE: Resources section is where you define all AWS resources in SAM/CloudFormation
+Resources:
+  TodaySchedulesTable:
+    # NOTE: While SAM provides AWS::Serverless::SimpleTable, we use AWS::DynamoDB::Table
+    # because we need complex features like GSIs and TTL that SimpleTable doesn't support
+    Type: AWS::DynamoDB::Table
+    Properties:
+      # ${self:custom.todaySchedulesTable} is resolved from serverless.yml
+      # Usually follows pattern: ${stage}-today-schedules (e.g., prod-today-schedules)
+      TableName: ${self:custom.todaySchedulesTable}
+
+      # On-demand pricing model - no need to provision capacity units
+      # Good for unpredictable workloads and development stages
+      # Alternative: PROVISIONED (requires ReadCapacityUnits and WriteCapacityUnits)
+      BillingMode: PAY_PER_REQUEST
+
+      # Define attributes that will be used in key schemas (primary key and GSIs)
+      # Note: Only need to define attributes used as keys
+      AttributeDefinitions:
+        # Primary partition key - distributes data across partitions
+        - AttributeName: pk # Format: user#<userId>#date#<YYYY-MM-DD>
+          AttributeType: S # S = String, N = Number, B = Binary
+
+        # Primary sort key - sorts items within a partition
+        - AttributeName: sk # Format: time#<HHmm>#schedule#<scheduleId>
+          AttributeType: S
+
+        # GSI partition key - for querying by status
+        - AttributeName: GSI1PK # Format: status#active
+          AttributeType: S
+
+        # GSI sort key - for time-based sorting in GSI
+        - AttributeName: GSI1SK # Format: time#<HHmm>
+          AttributeType: S
+
+      # Primary key schema definition
+      KeySchema:
+        # HASH key is the partition key
+        - AttributeName: pk
+          KeyType: HASH
+        # RANGE key is the sort key
+        - AttributeName: sk
+          KeyType: RANGE
+
+      # Global Secondary Indexes for additional access patterns
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1 # Status-Time index
+          KeySchema:
+            - AttributeName: GSI1PK # Query by status (e.g., active/deleted)
+              KeyType: HASH
+            - AttributeName: GSI1SK # Sort by time within status
+              KeyType: RANGE
+          # ProjectionType options:
+          # - ALL: Copy all attributes (more storage cost, faster queries)
+          # - KEYS_ONLY: Only copy key attributes (minimal storage cost)
+          # - INCLUDE: Specify attributes to copy
+          Projection:
+            ProjectionType: ALL
+
+      # TTL (Time To Live) for automatic item deletion
+      # DynamoDB automatically deletes items when current time > expiresAt
+      # No additional cost for TTL deletions
+      TimeToLiveSpecification:
+        AttributeName: expiresAt # Unix timestamp when item should be deleted
+        Enabled: true
+
+  # NOTE: Common SAM resource types you might add:
+  # ScheduleFunction:
+  #   Type: AWS::Serverless::Function
+  #   Properties:
+  #     Handler: src/handlers/schedule.handler
+  #     Runtime: nodejs18.x
+
+  # NOTE: API Gateway definition in SAM
+  # ScheduleApi:
+  #   Type: AWS::Serverless::Api
+  #   Properties:
+  #     StageName: prod
+# NOTE: SAM also supports these sections:
+# Globals: # Shared configuration across functions
+# Outputs: # Values exported for other stacks
+# Parameters: # Values passed at deployment time
+# Conditions: # Conditional resource creation
