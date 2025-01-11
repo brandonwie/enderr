@@ -1,3 +1,5 @@
+'use client';
+
 import { useTheme } from 'next-themes';
 
 import { Moon, Sun } from 'lucide-react';
@@ -12,8 +14,8 @@ export function Header() {
   const { theme, setTheme } = useTheme();
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-14 items-center justify-between">
+    <header className="sticky top-0 z-10 w-full border-b bg-background/95 px-16 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="flex h-14 items-center justify-between">
         <div className="font-bold">Enderr</div>
         <Button
           variant="ghost"
