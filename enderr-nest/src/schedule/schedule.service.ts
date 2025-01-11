@@ -144,34 +144,57 @@ export class ScheduleService {
 
   /**
    * Delete a schedule
+   * @remarks This will remove the schedule from both PostgreSQL and DynamoDB
    */
   async delete(id: string) {
-    const schedule = await this.prisma.schedule.findUnique({ where: { id } });
+    // First get the schedule to know what to clean up in DynamoDB
+    const schedule = await this.prisma.schedule.findUnique({
+      where: { id },
+      include: {
+        creator: true,
+      },
+    });
+
     if (!schedule) return;
 
-    // Delete from PostgreSQL
+    // Delete from PostgreSQL first
     await this.prisma.schedule.delete({ where: { id } });
 
-    // If it was a scheduled item, remove from DynamoDB
+    // If it was a scheduled item (not in inbox), remove from DynamoDB
     if (schedule.startTime && schedule.endTime) {
       const weekStart = this.getWeekStart(schedule.startTime);
       const day = this.getDayOfWeek(schedule.startTime);
+
+      // Get current week's schedules
       const weekSchedules = await this.dynamodb.getWeeklySchedules(
         schedule.creatorId,
         weekStart,
       );
 
       if (weekSchedules) {
+        // Filter out the deleted schedule
         const updatedDaySchedules = weekSchedules.schedules[day].filter(
           (s) => s.id !== id,
         );
+
+        // Update DynamoDB with filtered schedules
         await this.dynamodb.updateDaySchedules(
           schedule.creatorId,
           weekStart,
           day,
           updatedDaySchedules,
         );
+
+        this.logger.log(`Deleted schedule ${id} from PostgreSQL and DynamoDB`, {
+          userId: schedule.creatorId,
+          weekStart,
+          day,
+        });
       }
+    } else {
+      this.logger.log(`Deleted inbox schedule ${id} from PostgreSQL`, {
+        userId: schedule.creatorId,
+      });
     }
   }
 
