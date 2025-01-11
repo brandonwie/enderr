@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google';
 
 import { Header } from '@/components/header';
 import { ThemeProvider } from '@/components/theme-provider';
+import { cn } from '@/lib/utils';
 
 import './globals.css';
 
@@ -23,7 +24,14 @@ export default function RootLayout({
       lang="en"
       suppressHydrationWarning
     >
-      <body className={inter.className}>
+      <head>
+        <script
+          src="https://accounts.google.com/gsi/client"
+          async
+          defer
+        ></script>
+      </head>
+      <body className={cn(inter.className)}>
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
