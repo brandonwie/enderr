@@ -11,7 +11,6 @@ import { serverApiClient, getAuthCookies } from '@/lib/server/api-client';
 export async function GET() {
   try {
     const cookies = await getAuthCookies();
-    console.log('Forwarding cookies:', cookies); // Debug log
 
     const response = await serverApiClient.get('/auth/me', {
       headers: {
@@ -19,13 +18,12 @@ export async function GET() {
       },
     });
 
-    return NextResponse.json({ user: response.data.user });
+    return NextResponse.json(response.data);
   } catch (error) {
     if (error instanceof AxiosError) {
       console.error('Failed to get user info:', {
         status: error.response?.status,
         data: error.response?.data,
-        headers: error.config?.headers, // Log request headers
       });
     } else {
       console.error('Failed to get user info:', error);

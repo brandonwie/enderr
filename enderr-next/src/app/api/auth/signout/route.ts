@@ -6,19 +6,29 @@ import { serverApiClient, getAuthCookies } from '@/lib/server/api-client';
 
 /**
  * POST /api/auth/signout
- * @remarks Calls backend signout endpoint to clear cookies
+ * @remarks Calls backend signout endpoint to clear cookies and returns cleared cookies in response
  */
 export async function POST() {
   try {
-    const cookies = await getAuthCookies();
+    const authCookies = await getAuthCookies();
     await serverApiClient.post('/auth/signout', null, {
-      withCredentials: true,
       headers: {
-        Cookie: cookies,
+        Cookie: authCookies,
       },
     });
 
-    return NextResponse.json({ success: true });
+    // Clear cookies in response
+    const response = NextResponse.json({ success: true });
+    const options = {
+      maxAge: 0,
+      path: '/',
+    };
+
+    // Clear both tokens
+    response.cookies.set('access_token', '', options);
+    response.cookies.set('refresh_token', '', options);
+
+    return response;
   } catch (error) {
     if (error instanceof AxiosError) {
       console.error('Sign out failed:', {
