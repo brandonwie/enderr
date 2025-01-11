@@ -1,88 +1,128 @@
 # SAM template version declaration
 # NOTE: These two lines are required for SAM templates
-AWSTemplateFormatVersion: "2010-09-09"
+AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31 # Enables SAM functionality
 
 # NOTE: Resources section is where you define all AWS resources in SAM/CloudFormation
 Resources:
-  TodaySchedulesTable:
-    # NOTE: While SAM provides AWS::Serverless::SimpleTable, we use AWS::DynamoDB::Table
-    # because we need complex features like GSIs and TTL that SimpleTable doesn't support
+  # Table for storing weekly schedule views
+  # Access Patterns:
+  # 1. Get all schedules for a user's week:
+  #    - Query by userId (HASH) + weekStart (RANGE)
+  #    - Used for conflict resolution
+  #    Example Query:
+  #    ```typescript
+  #    await dynamodb.getWeeklySchedules(
+  #      userId: "user123",
+  #      weekStart: "2024-03-18"  // Monday's date
+  #    );
+  #    ```
+  # 2. Update schedules for a specific day:
+  #    - First get the week's data
+  #    - Update the specific day's array
+  #    - Used for conflict resolution
+  #    Example Update:
+  #    ```typescript
+  #    await dynamodb.updateDaySchedules(
+  #      userId: "user123",
+  #      weekStart: "2024-03-18",
+  #      day: "monday",
+  #      schedules: [/* updated schedules */]
+  #    );
+  #    ```
+  WeeklySchedulesTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      # ${self:custom.todaySchedulesTable} is resolved from serverless.yml
-      # Usually follows pattern: ${stage}-today-schedules (e.g., prod-today-schedules)
-      TableName: ${self:custom.todaySchedulesTable}
-
-      # On-demand pricing model - no need to provision capacity units
-      # Good for unpredictable workloads and development stages
-      # Alternative: PROVISIONED (requires ReadCapacityUnits and WriteCapacityUnits)
+      # Table name will be like: prod-weekly-schedules
+      TableName: ${self:custom.weeklySchedulesTable}
       BillingMode: PAY_PER_REQUEST
 
-      # Define attributes that will be used in key schemas (primary key and GSIs)
-      # Note: Only need to define attributes used as keys
       AttributeDefinitions:
-        # Primary partition key - distributes data across partitions
-        - AttributeName: pk # Format: user#<userId>#date#<YYYY-MM-DD>
-          AttributeType: S # S = String, N = Number, B = Binary
-
-        # Primary sort key - sorts items within a partition
-        - AttributeName: sk # Format: time#<HHmm>#schedule#<scheduleId>
+        # Primary partition key - user ID
+        - AttributeName: userId
+          AttributeType: S
+        # Primary sort key - week start date (YYYY-MM-DD)
+        - AttributeName: weekStart
           AttributeType: S
 
-        # GSI partition key - for querying by status
-        - AttributeName: GSI1PK # Format: status#active
-          AttributeType: S
-
-        # GSI sort key - for time-based sorting in GSI
-        - AttributeName: GSI1SK # Format: time#<HHmm>
-          AttributeType: S
-
-      # Primary key schema definition
       KeySchema:
-        # HASH key is the partition key
-        - AttributeName: pk
+        - AttributeName: userId
           KeyType: HASH
-        # RANGE key is the sort key
-        - AttributeName: sk
+        - AttributeName: weekStart
           KeyType: RANGE
 
-      # Global Secondary Indexes for additional access patterns
-      GlobalSecondaryIndexes:
-        - IndexName: GSI1 # Status-Time index
-          KeySchema:
-            - AttributeName: GSI1PK # Query by status (e.g., active/deleted)
-              KeyType: HASH
-            - AttributeName: GSI1SK # Sort by time within status
-              KeyType: RANGE
-          # ProjectionType options:
-          # - ALL: Copy all attributes (more storage cost, faster queries)
-          # - KEYS_ONLY: Only copy key attributes (minimal storage cost)
-          # - INCLUDE: Specify attributes to copy
-          Projection:
-            ProjectionType: ALL
+      # No GSIs needed as we only query by userId + weekStart
+      # No TTL needed as we keep all schedule history
 
-      # TTL (Time To Live) for automatic item deletion
-      # DynamoDB automatically deletes items when current time > expiresAt
-      # No additional cost for TTL deletions
+  # Table for storing note operations (collaborative editing)
+  # Access Patterns:
+  # 1. Get latest operations for a block:
+  #    - Query by noteId (HASH) + blockId (RANGE)
+  #    - Used for conflict resolution
+  #    Example Query:
+  #    ```typescript
+  #    await dynamodb.queryBlockOperations(
+  #      noteId: "note123",
+  #      blockId: "block456",
+  #      limit: 1  // Get most recent
+  #    );
+  #    ```
+  # 2. Store new operation:
+  #    - Put item with noteId + blockId
+  #    - Includes operation details and timestamp
+  #    - Used for conflict resolution
+  #    Example Put:
+  #    ```typescript
+  #    await dynamodb.putItem({
+  #      TableName: "NoteOperations",
+  #      Item: {
+  #        noteId: "note123",
+  #        blockId: "block456",
+  #        operation: { type: "update", content: "new content" },
+  #        timestamp: new Date().toISOString(),
+  #        version: 2
+  #      }
+  #    });
+  #    ```
+  NoteOperationsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      # Table name will be like: prod-note-operations
+      TableName: ${self:custom.noteOperationsTable}
+      BillingMode: PAY_PER_REQUEST
+
+      AttributeDefinitions:
+        # Primary partition key - note ID
+        - AttributeName: noteId
+          AttributeType: S
+        # Primary sort key - block ID
+        - AttributeName: blockId
+          AttributeType: S
+
+      KeySchema:
+        - AttributeName: noteId
+          KeyType: HASH
+        - AttributeName: blockId
+          KeyType: RANGE
+
+      # TTL to automatically clean up old operations
+      # Helps manage storage costs and table size
       TimeToLiveSpecification:
-        AttributeName: expiresAt # Unix timestamp when item should be deleted
+        AttributeName: expiresAt
         Enabled: true
 
-  # NOTE: Common SAM resource types you might add:
-  # ScheduleFunction:
-  #   Type: AWS::Serverless::Function
-  #   Properties:
-  #     Handler: src/handlers/schedule.handler
-  #     Runtime: nodejs18.x
+# NOTE: Additional resources like Lambda functions or API Gateway would go here
+# For now, we're just defining the DynamoDB tables as that's what we're using
 
-  # NOTE: API Gateway definition in SAM
-  # ScheduleApi:
-  #   Type: AWS::Serverless::Api
-  #   Properties:
-  #     StageName: prod
-# NOTE: SAM also supports these sections:
-# Globals: # Shared configuration across functions
-# Outputs: # Values exported for other stacks
-# Parameters: # Values passed at deployment time
-# Conditions: # Conditional resource creation
+Outputs:
+  WeeklySchedulesTableName:
+    Description: Name of the WeeklySchedules table
+    Value: !Ref WeeklySchedulesTable
+    Export:
+      Name: !Sub '${AWS::StackName}-WeeklySchedulesTableName'
+
+  NoteOperationsTableName:
+    Description: Name of the NoteOperations table
+    Value: !Ref NoteOperationsTable
+    Export:
+      Name: !Sub '${AWS::StackName}-NoteOperationsTableName'
