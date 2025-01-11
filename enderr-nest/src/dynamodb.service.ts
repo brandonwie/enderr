@@ -3,16 +3,6 @@ import { ConfigService } from '@nestjs/config';
 import { DynamoDB } from 'aws-sdk';
 import { WeeklySchedules, DailySchedule } from '@shared/types/schedule';
 
-// DynamoDB Schema for Note Operations
-// {
-//   pk: "note#<noteId>",           // Partition Key
-//   sk: "<timestamp>#<userId>",    // Sort Key
-//   changes: NoteOperation[],      // Array of operations
-//   version: number,               // Base version
-//   userId: string,                // Who made the change
-//   timestamp: number             // When the change was made
-// }
-
 /**
  * Service for handling DynamoDB operations
  * @remarks Specifically for managing weekly schedule views and note operations
@@ -255,5 +245,87 @@ export class DynamoDBService implements OnModuleInit, OnModuleDestroy {
     );
 
     await this.updateDaySchedules(userId, weekStart, day, daySchedules);
+  }
+
+  /**
+   * Batch write items to DynamoDB
+   * @remarks Automatically handles chunking into 25 items per request (DynamoDB limit)
+   */
+  async batchWriteItems(tableName: string, items: Record<string, any>[]) {
+    // DynamoDB can only process 25 items per batch
+    const BATCH_SIZE = 25;
+    const chunks = [];
+
+    // Split items into chunks of 25
+    for (let i = 0; i < items.length; i += BATCH_SIZE) {
+      chunks.push(items.slice(i, i + BATCH_SIZE));
+    }
+
+    // Process each chunk
+    await Promise.all(
+      chunks.map(async (chunk) => {
+        const params: DynamoDB.DocumentClient.BatchWriteItemInput = {
+          RequestItems: {
+            [tableName]: chunk.map((item) => ({
+              PutRequest: {
+                Item: item,
+              },
+            })),
+          },
+        };
+
+        await this.client.batchWrite(params).promise();
+      }),
+    );
+  }
+
+  /**
+   * Query operations for a specific block
+   * @remarks Used for conflict resolution in collaborative editing
+   */
+  async queryBlockOperations(noteId: string, blockId: string, limit = 1) {
+    const result = await this.client
+      .query({
+        TableName: 'NoteOperations',
+        KeyConditionExpression: 'noteId = :noteId AND blockId = :blockId',
+        ExpressionAttributeValues: {
+          ':noteId': noteId,
+          ':blockId': blockId,
+        },
+        ScanIndexForward: false, // Get most recent first
+        Limit: limit,
+      })
+      .promise();
+
+    return result.Items;
+  }
+
+  /**
+   * Batch delete items from DynamoDB
+   * @remarks Automatically handles chunking into 25 items per request (DynamoDB limit)
+   */
+  async batchDeleteItems(
+    tableName: string,
+    keys: { noteId: string; blockId: string }[],
+  ) {
+    // DynamoDB can only process 25 items per batch
+    const BATCH_SIZE = 25;
+
+    // Process in chunks
+    for (let i = 0; i < keys.length; i += BATCH_SIZE) {
+      const batch = keys.slice(i, i + BATCH_SIZE).map((key) => ({
+        DeleteRequest: {
+          Key: key,
+        },
+      }));
+
+      await this.client
+        .batchWrite({
+          RequestItems: {
+            [tableName]: batch,
+          },
+        })
+        .promise();
+    }
   }
 }

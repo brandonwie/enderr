@@ -49,14 +49,15 @@ export class NoteController {
   }
 
   /**
-   * Apply a batch of operations to a note's blocks
-   * @remarks Operations are applied in order within a transaction
+   * Update a block in a note
+   * @remarks Client sends operations when:
+   * 1. User switches to another block
+   * 2. User presses Enter (creates new block)
+   * 3. After debounce timeout (e.g., 2 seconds of no typing)
    * @example
    * ```typescript
-   * // Example batch for updating a block's content
+   * // Example payload for updating a block's content
    * {
-   *   noteId: "123",
-   *   userId: "user1",
    *   operations: [{
    *     blockId: "block1",
    *     type: "update",
@@ -67,15 +68,14 @@ export class NoteController {
    * }
    * ```
    */
-  @Post(':id/operations')
-  async applyOperations(
+  @Post(':id/blocks')
+  async updateBlock(
     @Param('id') id: string,
     @User() user: UserFromJwt,
     @Body() batch: Omit<NoteOperationBatch, 'noteId' | 'userId'>,
   ) {
-    this.logger.log(
-      `Applying ${batch.operations.length} operations to note ${id}`,
-    );
+    const blockId = batch.operations[batch.operations.length - 1].blockId;
+    this.logger.log(`Updating block ${blockId} in note ${id}`);
 
     const fullBatch: NoteOperationBatch = {
       ...batch,
@@ -83,7 +83,7 @@ export class NoteController {
       userId: user.id,
     };
 
-    return this.noteService.applyOperations(id, fullBatch);
+    return this.noteService.updateBlock(id, fullBatch);
   }
 
   /**

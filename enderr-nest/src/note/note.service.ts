@@ -1,7 +1,14 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { DynamoDBService } from '../dynamodb.service';
 import { BlockOperation, NoteOperationBatch } from '@shared/types/note';
+
+const MAX_OPERATIONS_PER_BATCH = 50;
 
 @Injectable()
 export class NoteService {
@@ -43,10 +50,17 @@ export class NoteService {
   }
 
   /**
-   * Applies a batch of operations to blocks in a note
-   * @remarks Only stores the last operation for each block since it represents the current state
+   * Updates a single block in a note and records its final state in DynamoDB
+   * @remarks Frontend sends the request when user switches blocks or after debounce
    */
-  async applyOperations(noteId: string, batch: NoteOperationBatch) {
+  async updateBlock(noteId: string, batch: NoteOperationBatch) {
+    if (batch.operations.length > MAX_OPERATIONS_PER_BATCH) {
+      throw new BadRequestException(
+        `Cannot process more than ${MAX_OPERATIONS_PER_BATCH} operations at once`,
+      );
+    }
+
+    // Get note and check version for conflicts
     const note = await this.prisma.note.findUnique({
       where: { id: noteId },
       include: { blocks: true },
@@ -56,83 +70,92 @@ export class NoteService {
       throw new NotFoundException(`Note ${noteId} not found`);
     }
 
-    // Group operations by blockId and get only the last operation for each block
-    const lastOperationsByBlock = batch.operations.reduce(
-      (acc, op) => {
-        acc[op.blockId] = op; // Each new operation overwrites the previous one
-        return acc;
+    // Get the final state (last operation)
+    const finalOperation = batch.operations[batch.operations.length - 1];
+    const savedBlock = note.blocks.find((b) => b.id === finalOperation.blockId);
+
+    // Check for conflicts
+    if (savedBlock && savedBlock.version > batch.baseVersion) {
+      // Get latest operations from DynamoDB to resolve conflict
+      const operations = await this.dynamodb.queryBlockOperations(
+        noteId,
+        finalOperation.blockId,
+      );
+
+      const latestOperation = operations?.[0]?.operation;
+
+      if (latestOperation) {
+        // If there's a conflict, merge the changes
+        // Strategy: Last-write-wins with preserved formatting
+        finalOperation.content = this.mergeContent(
+          latestOperation.content || '',
+          finalOperation.content || '',
+        );
+      }
+    }
+
+    // Store final state in DynamoDB
+    await this.dynamodb.putItem({
+      TableName: 'NoteOperations',
+      Item: {
+        noteId,
+        blockId: finalOperation.blockId,
+        userId: batch.userId,
+        operation: finalOperation,
+        timestamp: new Date().toISOString(),
+        version: note.version,
       },
-      {} as Record<string, BlockOperation>,
-    );
+    });
 
-    // Log only the last operation for each block in DynamoDB
-    await Promise.all(
-      Object.values(lastOperationsByBlock).map((op) =>
-        this.dynamodb.putItem({
-          TableName: 'NoteOperations',
-          Item: {
-            noteId,
-            blockId: op.blockId,
-            userId: batch.userId,
-            operation: op,
-            timestamp: new Date().toISOString(),
-            version: note.version,
-          },
-        }),
-      ),
-    );
+    // Apply the operation in PostgreSQL
+    await this.prisma.$transaction(async (prisma) => {
+      switch (finalOperation.type) {
+        case 'create':
+          await prisma.block.create({
+            data: {
+              id: finalOperation.blockId,
+              type: finalOperation.blockType!,
+              content: finalOperation.content || '',
+              order: finalOperation.order!,
+              note: { connect: { id: noteId } },
+            },
+          });
+          break;
 
-    // Apply operations to PostgreSQL
-    await this.prisma.$transaction(async (tx) => {
-      for (const op of batch.operations) {
-        switch (op.type) {
-          case 'create':
-            await tx.block.create({
-              data: {
-                id: op.blockId,
-                type: op.blockType!,
-                content: op.content || '',
-                order: op.order!,
-                note: { connect: { id: noteId } },
-              },
-            });
-            break;
+        case 'update':
+          await prisma.block.update({
+            where: { id: finalOperation.blockId },
+            data: {
+              content: finalOperation.content,
+              type: finalOperation.blockType,
+              version: { increment: 1 },
+            },
+          });
+          break;
 
-          case 'update':
-            await tx.block.update({
-              where: { id: op.blockId },
-              data: {
-                content: op.content,
-                type: op.blockType,
-                version: { increment: 1 },
-              },
-            });
-            break;
+        case 'delete':
+          await prisma.block.delete({
+            where: { id: finalOperation.blockId },
+          });
+          break;
 
-          case 'delete':
-            await tx.block.delete({
-              where: { id: op.blockId },
-            });
-            break;
-
-          case 'move':
-            await tx.block.update({
-              where: { id: op.blockId },
-              data: { order: op.order },
-            });
-            break;
-        }
+        case 'move':
+          await prisma.block.update({
+            where: { id: finalOperation.blockId },
+            data: { order: finalOperation.order },
+          });
+          break;
       }
 
       // Update note version
-      await tx.note.update({
+      await prisma.note.update({
         where: { id: noteId },
         data: { version: { increment: 1 } },
       });
     });
 
     this.logger.log(
-      `Applied ${batch.operations.length} operations to note ${noteId}`,
+      `Updated block ${finalOperation.blockId} in note ${noteId}`,
     );
 
     // Return updated note
@@ -146,6 +169,16 @@ export class NoteService {
         collaborators: true,
       },
     });
+  }
+
+  /**
+   * Merge two versions of content when there's a conflict
+   * @remarks Uses a simple last-write-wins strategy while preserving formatting
+   */
+  private mergeContent(serverContent: string, clientContent: string): string {
+    // For now, using a simple last-write-wins strategy
+    // TODO: Implement more sophisticated merging if needed
+    return clientContent;
   }
 
   /**
@@ -195,12 +228,34 @@ export class NoteService {
 
   /**
    * Deletes a note and all its blocks
-   * @remarks This will cascade delete all blocks
+   * @remarks This will cascade delete all blocks in PostgreSQL and operations in DynamoDB
    */
   async delete(id: string) {
+    // First get all block IDs to delete from DynamoDB
+    const note = await this.prisma.note.findUnique({
+      where: { id },
+      include: { blocks: true },
+    });
+
+    if (!note) {
+      throw new NotFoundException(`Note ${id} not found`);
+    }
+
+    // Delete from PostgreSQL (this will cascade delete blocks)
     await this.prisma.note.delete({
       where: { id },
     });
-    this.logger.log(`Deleted note ${id} and all its blocks`);
+
+    // Delete all operations from DynamoDB
+    const keys = note.blocks.map((block) => ({
+      noteId: id,
+      blockId: block.id,
+    }));
+
+    await this.dynamodb.batchDeleteItems('NoteOperations', keys);
+
+    this.logger.log(
+      `Deleted note ${id} and all its blocks from PostgreSQL and DynamoDB`,
+    );
   }
 }
