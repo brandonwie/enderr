@@ -7,11 +7,16 @@ import {
   Res,
   Logger,
   InternalServerErrorException,
+  UseGuards,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { IsString, IsNotEmpty } from 'class-validator';
 import { AuthService } from './auth.service';
 import { ConfigService } from '@nestjs/config';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { User } from './decorators/user.decorator';
+import { UserFromJwt } from './types/user';
+import { PrismaService } from '../prisma.service';
 
 class GoogleSignInDto {
   @IsString()
@@ -51,6 +56,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
+    private readonly prisma: PrismaService,
   ) {}
 
   /**
@@ -196,5 +202,34 @@ export class AuthController {
       path: '/',
       domain,
     });
+  }
+
+  /**
+   * Get current user information
+   * @param user User from JWT token
+   */
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  async getCurrentUser(@User() user: UserFromJwt) {
+    try {
+      const dbUser = await this.prisma.user.findUnique({
+        where: { id: user.id },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          picture: true,
+        },
+      });
+
+      if (!dbUser) {
+        throw new UnauthorizedException('User not found');
+      }
+
+      return { user: dbUser };
+    } catch (error) {
+      this.logger.error('Failed to get user info', error.stack);
+      throw new UnauthorizedException('Failed to get user info');
+    }
   }
 }

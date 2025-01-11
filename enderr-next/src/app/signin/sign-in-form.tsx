@@ -55,9 +55,7 @@ export default function SignInForm() {
     const handleCredentialResponse = async (response: {
       credential: string;
     }) => {
-      console.log('Google response:', response);
       const endpoint = `${process.env.NEXT_PUBLIC_API_URL}/auth/google/callback`;
-      console.log('Sending request to:', endpoint);
 
       try {
         const res = await fetch(endpoint, {
@@ -69,17 +67,13 @@ export default function SignInForm() {
           credentials: 'include',
         });
 
-        console.log('Response status:', res.status);
         const data = await res.json();
-        console.log('Response data:', data);
 
         if (!res.ok) {
           throw new Error(
             `Authentication failed: ${data.message || res.statusText}`,
           );
         }
-
-        window.location.href = '/';
       } catch (error) {
         console.error('Authentication error:', error);
         // TODO: Show error message to user
