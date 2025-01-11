@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -7,7 +7,8 @@ import { DynamoDBService } from './dynamodb.service';
 import { validateEnv } from './config/env.validation';
 import { LoggerModule } from './logger/logger.module';
 import { AuthModule } from './auth/auth.module';
-import { CustomLogger } from './logger/logger.service';
+import { ScheduleModule } from './schedule/schedule.module';
+import { RequestLoggerMiddleware } from './middleware/request-logger.middleware';
 
 /**
  * Root module of the application
@@ -26,8 +27,13 @@ import { CustomLogger } from './logger/logger.service';
     }),
     LoggerModule,
     AuthModule,
+    ScheduleModule,
   ],
   controllers: [AppController],
-  providers: [AppService, PrismaService, DynamoDBService, CustomLogger],
+  providers: [AppService, PrismaService, DynamoDBService],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(RequestLoggerMiddleware).forRoutes('*');
+  }
+}

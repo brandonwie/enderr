@@ -8,6 +8,7 @@ interface JwtPayload {
   sub: string;
 }
 
+// NOTE The strategy is registered with Passport using the 'jwt' name
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
@@ -24,6 +25,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   /**
    * Validate JWT payload and return user
    * @param payload JWT payload with user ID
+   * NOTE The validate method is called by Passport after token verification
    */
   async validate(payload: JwtPayload) {
     const user = await this.prisma.user.findUnique({

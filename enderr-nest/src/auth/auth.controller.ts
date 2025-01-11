@@ -2,7 +2,7 @@ import { Controller, Post, Body, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 
 class GoogleSignInDto {
-  token: string;
+  google_token: string;
 }
 
 class RefreshTokenDto {
@@ -24,10 +24,10 @@ export class AuthController {
    */
   @Post('signin')
   async signInWithGoogle(@Body() dto: GoogleSignInDto): Promise<JwtTokens> {
-    if (!dto.token) {
+    if (!dto.google_token) {
       throw new UnauthorizedException('Token is required');
     }
-    return this.authService.signInWithGoogle(dto.token);
+    return this.authService.signInWithGoogle(dto.google_token);
   }
 
   /**

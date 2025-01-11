@@ -21,6 +21,8 @@ model User {
   profileImage  String?
   schedules     Schedule[] @relation("CreatedSchedules")
   participating Schedule[] @relation("ParticipatingSchedules")
+  createdNotes  Note[]     @relation("CreatedNotes")
+  collaboratingNotes Note[] @relation("CollaboratingNotes")
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
@@ -56,13 +58,32 @@ model Schedule {
 
 // Note model
 model Note {
-  id        String     @id @default(uuid())
-  title     String
-  content   Json       // JSONB for rich text content
-  version   Int        @default(1)
-  schedules Schedule[]
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  id           String     @id @default(uuid())
+  title        String
+  blocks       Block[]    // Changed from content to blocks relation
+  version      Int        @default(1)
+  creator      User       @relation("CreatedNotes", fields: [creatorId], references: [id])
+  creatorId    String
+  collaborators User[]    @relation("CollaboratingNotes")
+  schedules    Schedule[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
   @@map("notes")
+}
+
+// Block model for note content
+model Block {
+  id        String   @id @default(uuid())
+  type      String   // paragraph, heading1, etc.
+  content   String
+  order     Int
+  note      Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  noteId    String
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([noteId, order])
+  @@map("blocks")
 }

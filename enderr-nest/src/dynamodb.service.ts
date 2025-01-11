@@ -3,9 +3,19 @@ import { ConfigService } from '@nestjs/config';
 import { DynamoDB } from 'aws-sdk';
 import { WeeklySchedules, DailySchedule } from '@shared/types/schedule';
 
+// DynamoDB Schema for Note Operations
+// {
+//   pk: "note#<noteId>",           // Partition Key
+//   sk: "<timestamp>#<userId>",    // Sort Key
+//   changes: NoteOperation[],      // Array of operations
+//   version: number,               // Base version
+//   userId: string,                // Who made the change
+//   timestamp: number             // When the change was made
+// }
+
 /**
  * Service for handling DynamoDB operations
- * @remarks Specifically for managing weekly schedule views
+ * @remarks Specifically for managing weekly schedule views and note operations
  */
 @Injectable()
 export class DynamoDBService implements OnModuleInit, OnModuleDestroy {
@@ -15,7 +25,6 @@ export class DynamoDBService implements OnModuleInit, OnModuleDestroy {
 
   constructor(private configService: ConfigService) {
     const nodeEnv = this.configService.get<string>('NODE_ENV', 'development');
-    // Use local DynamoDB for development and test environments
     this.isDevelopment = nodeEnv !== 'production';
     this.tableName = this.configService.get<string>('DYNAMODB_TABLE_NAME');
 
@@ -23,16 +32,13 @@ export class DynamoDBService implements OnModuleInit, OnModuleDestroy {
       region: this.configService.get<string>('AWS_REGION', 'local'),
     };
 
-    // Use local endpoint for development and test
     if (this.isDevelopment) {
       config.endpoint = 'http://localhost:8000';
-      // Local DynamoDB doesn't need real credentials
       config.credentials = {
         accessKeyId: 'local',
         secretAccessKey: 'local',
       };
     } else {
-      // Production AWS credentials
       config.credentials = {
         accessKeyId: this.configService.get<string>('AWS_ACCESS_KEY_ID'),
         secretAccessKey: this.configService.get<string>(
@@ -164,5 +170,90 @@ export class DynamoDBService implements OnModuleInit, OnModuleDestroy {
         },
       })
       .promise();
+  }
+
+  /**
+   * Put an item into DynamoDB
+   */
+  async putItem(
+    params: DynamoDB.DocumentClient.PutItemInput,
+  ): Promise<DynamoDB.DocumentClient.PutItemOutput> {
+    return this.client.put(params).promise();
+  }
+
+  /**
+   * Quick update for schedule position/time
+   * @remarks Used for drag-drop operations
+   */
+  async updateSchedulePosition(
+    userId: string,
+    weekStart: string,
+    day: keyof WeeklySchedules['schedules'],
+    scheduleId: string,
+    updates: {
+      startTime: string;
+      endTime: string;
+      order: number;
+    },
+  ): Promise<void> {
+    const schedules = await this.getWeeklySchedules(userId, weekStart);
+    if (!schedules) return;
+
+    // Update the specific schedule
+    const daySchedules = schedules.schedules[day];
+    const scheduleIndex = daySchedules.findIndex((s) => s.id === scheduleId);
+
+    if (scheduleIndex >= 0) {
+      daySchedules[scheduleIndex] = {
+        ...daySchedules[scheduleIndex],
+        ...updates,
+      };
+
+      // Reorder if needed
+      daySchedules.sort(
+        (a, b) =>
+          new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
+      );
+
+      await this.updateDaySchedules(userId, weekStart, day, daySchedules);
+    }
+  }
+
+  /**
+   * Add schedule from inbox to calendar
+   * @remarks Used when dragging from inbox to calendar
+   */
+  async addScheduleToDay(
+    userId: string,
+    weekStart: string,
+    day: keyof WeeklySchedules['schedules'],
+    schedule: DailySchedule,
+  ): Promise<void> {
+    const schedules = await this.getWeeklySchedules(userId, weekStart);
+    if (!schedules) {
+      // Create new week entry
+      await this.updateWeeklySchedules({
+        userId,
+        weekStart,
+        schedules: {
+          monday: [],
+          tuesday: [],
+          wednesday: [],
+          thursday: [],
+          friday: [],
+          [day]: [schedule],
+        },
+      });
+      return;
+    }
+
+    // Add to existing day and sort
+    const daySchedules = [...schedules.schedules[day], schedule];
+    daySchedules.sort(
+      (a, b) =>
+        new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
+    );
+
+    await this.updateDaySchedules(userId, weekStart, day, daySchedules);
   }
 }
