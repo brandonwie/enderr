@@ -328,4 +328,18 @@ export class DynamoDBService implements OnModuleInit, OnModuleDestroy {
         .promise();
     }
   }
+
+  /**
+   * Check if DynamoDB is healthy by attempting a simple operation
+   */
+  async isHealthy(): Promise<boolean> {
+    try {
+      await this.client
+        .scan({ TableName: 'WeeklySchedules', Limit: 1 })
+        .promise();
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
 }
