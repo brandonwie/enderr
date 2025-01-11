@@ -131,6 +131,48 @@ export class AuthService {
   }
 
   /**
+   * Handle Google Identity Services callback
+   * @param credential JWT credential from Google Identity Services
+   */
+  async handleGoogleCallback(credential: string): Promise<JwtTokens> {
+    try {
+      // Verify the credential token
+      const ticket = await this.googleClient.verifyIdToken({
+        idToken: credential,
+        audience: this.configService.get<string>('GOOGLE_CLIENT_ID'),
+      });
+
+      const payload = ticket.getPayload();
+      if (!payload || !payload.email || !payload.name) {
+        this.logger.error('Invalid token payload', null, { payload });
+        throw new UnauthorizedException('Invalid token payload');
+      }
+
+      // Extract user information from payload
+      const userInfo: GoogleTokenPayload = {
+        email: payload.email,
+        name: payload.name,
+        picture: payload.picture || '', // Picture might be optional
+      };
+
+      // Find or create user
+      const user = await this.findOrCreateUser(userInfo);
+      this.logger.debug('User authenticated via callback', {
+        userId: user.id,
+        email: user.email,
+      });
+
+      // Generate tokens
+      return this.generateTokens(user.id);
+    } catch (error) {
+      this.logger.error('Google callback authentication failed', error.stack, {
+        error: error.message,
+      });
+      throw new UnauthorizedException('Authentication failed');
+    }
+  }
+
+  /**
    * Generate access and refresh tokens
    * @param userId User ID for token payload
    */

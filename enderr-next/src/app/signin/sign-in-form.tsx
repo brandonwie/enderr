@@ -10,7 +10,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 
-// Add type declarations for Google Identity Services
+// Enhanced type declarations for Google Identity Services
 declare global {
   interface Window {
     google: {
@@ -19,15 +19,23 @@ declare global {
           initialize: (config: {
             client_id: string;
             callback: (response: { credential: string }) => void;
+            auto_select?: boolean; // Add this for better UX
+            use_fedcm_for_prompt?: boolean; // Optional FedCM support
           }) => void;
           renderButton: (
             parent: HTMLElement,
             options: {
-              theme: 'outline' | 'filled';
-              size: 'large' | 'medium' | 'small';
+              type?: 'standard' | 'icon'; // Must be 'standard' for personalized button
+              theme?: 'outline' | 'filled';
+              size?: 'large' | 'medium' | 'small';
+              text?: 'signin_with' | 'signup_with' | 'continue_with' | 'signin';
+              shape?: 'rectangular' | 'pill' | 'circle' | 'square';
+              logo_alignment?: 'left' | 'center';
+              width?: number; // Must be >= 200 for personalized button
+              locale?: string;
             },
           ) => void;
-          prompt: () => void; // Add prompt method for One Tap
+          prompt: () => void;
         };
       };
     };
@@ -36,7 +44,11 @@ declare global {
 
 /**
  * Sign In Form Component (Client Component)
- * @remarks Handles Google OAuth sign-in using Google Identity Services
+ * @remarks
+ * - Uses Google Identity Services for authentication
+ * - Supports personalized button display for returning users
+ * - Button width >= 200px to allow personalized display
+ * - Uses 'standard' type to enable personalization
  */
 export default function SignInForm() {
   useEffect(() => {
@@ -44,7 +56,6 @@ export default function SignInForm() {
       credential: string;
     }) => {
       console.log('Google response:', response);
-
       const endpoint = `${process.env.NEXT_PUBLIC_API_URL}/auth/google/callback`;
       console.log('Sending request to:', endpoint);
 
@@ -55,7 +66,7 @@ export default function SignInForm() {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ credential: response.credential }),
-          credentials: 'include', // Important for cookies
+          credentials: 'include',
         });
 
         console.log('Response status:', res.status);
@@ -68,7 +79,6 @@ export default function SignInForm() {
           );
         }
 
-        // Redirect to home page on success
         window.location.href = '/';
       } catch (error) {
         console.error('Authentication error:', error);
@@ -76,21 +86,48 @@ export default function SignInForm() {
       }
     };
 
-    // Initialize Google Identity Services when window loads
-    window.onload = () => {
+    const initializeGoogleSignIn = () => {
       window.google.accounts.id.initialize({
         client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!,
         callback: handleCredentialResponse,
+        auto_select: false, // Disable auto-select as per docs
       });
 
-      // Render the button
+      // Render button with settings that allow personalization
       window.google.accounts.id.renderButton(
         document.getElementById('buttonDiv')!,
-        { theme: 'outline', size: 'large' }, // customization attributes
+        {
+          type: 'standard', // Required for personalized button
+          theme: 'outline',
+          size: 'large',
+          text: 'signin_with', // "Sign in with Google"
+          shape: 'rectangular',
+          logo_alignment: 'left',
+          width: 250, // >= 200px to allow personalized display
+        },
       );
 
-      // Also display the One Tap dialog
+      // Display One Tap prompt
       window.google.accounts.id.prompt();
+    };
+
+    // Initialize when the script is loaded
+    if (window.google?.accounts?.id) {
+      initializeGoogleSignIn();
+    } else {
+      // Wait for script to load
+      const script = document.querySelector(
+        'script[src="https://accounts.google.com/gsi/client"]',
+      );
+      script?.addEventListener('load', initializeGoogleSignIn);
+    }
+
+    // Cleanup
+    return () => {
+      const script = document.querySelector(
+        'script[src="https://accounts.google.com/gsi/client"]',
+      );
+      script?.removeEventListener('load', initializeGoogleSignIn);
     };
   }, []);
 
@@ -103,7 +140,10 @@ export default function SignInForm() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div id="buttonDiv"></div>
+        <div
+          id="buttonDiv"
+          className="flex justify-center"
+        ></div>
       </CardContent>
     </Card>
   );

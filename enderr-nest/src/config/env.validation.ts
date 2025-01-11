@@ -10,6 +10,7 @@ export const envSchema = z
     NODE_ENV: z
       .enum(['development', 'production', 'test'])
       .default('development'),
+    PORT: z.string().default('8080'),
 
     // PostgreSQL
     DATABASE_URL: z.string().min(1),
@@ -20,6 +21,18 @@ export const envSchema = z
     AWS_ACCESS_KEY_ID: z.string().min(1).optional(),
     AWS_SECRET_ACCESS_KEY: z.string().min(1).optional(),
     DYNAMODB_TABLE_NAME: z.string().min(1),
+
+    // Google OAuth
+    GOOGLE_CLIENT_ID: z.string().min(1),
+
+    // JWT Configuration
+    JWT_SECRET: z.string().min(10),
+    JWT_ACCESS_TOKEN_EXPIRATION: z.string().default('15m'),
+    JWT_REFRESH_TOKEN_SECRET: z.string().min(10),
+    JWT_REFRESH_TOKEN_EXPIRATION: z.string().default('7d'),
+
+    // Cookie Configuration
+    COOKIE_DOMAIN: z.string().default('localhost'),
   })
   .refine(
     (data) => {
