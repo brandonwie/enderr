@@ -2,6 +2,21 @@ import { Schedule } from "./schedule";
 import { UserBasicInfo } from "./user";
 
 /**
+ * Represents a block in a note
+ * @remarks Each line in the note is a block, similar to Notion
+ */
+export interface NoteBlock {
+  /** Unique identifier for the block */
+  id: string;
+  /** Block type (paragraph, heading, etc.) */
+  type: "p" | "h1" | "h2" | "h3" | "code";
+  /** Block content in markdown */
+  content: string;
+  /** Order of the block in the note */
+  order: number;
+}
+
+/**
  * Represents a note in the system
  * @remarks Notes can be attached to schedules and edited concurrently by multiple users
  */
@@ -10,8 +25,8 @@ export interface Note {
   id: string;
   /** Title of the note */
   title: string;
-  /** Content of the note in markdown format */
-  content: string;
+  /** Blocks of content */
+  blocks: NoteBlock[];
   /** Schedules this note is attached to */
   schedules?: Schedule[];
   /** Creator of the note */
@@ -27,35 +42,37 @@ export interface Note {
 }
 
 /**
- * Represents a change in the note's content
- * @remarks Used for implementing Operational Transformation for concurrent editing
+ * Represents a change in a block's content
+ * @remarks Used for implementing block-based collaborative editing
  */
-export interface NoteOperation {
-  /** Unique identifier for the operation */
-  id: string;
-  /** ID of the note being modified */
-  noteId: string;
-  /** User who made the change */
-  userId: string;
-  /** Version number this operation is based on */
-  baseVersion: number;
-  /** Type of operation (insert, delete, etc.) */
-  type: "insert" | "delete" | "replace";
-  /** Position in the content where the operation starts */
-  position: number;
-  /** Content being inserted or deleted */
+export interface BlockOperation {
+  /** ID of the block being modified */
+  blockId: string;
+  /** Type of operation */
+  type: "update" | "create" | "delete" | "move";
+  /** Current content of the block (for update operations) */
   content?: string;
-  /** Length of content being affected (for delete operations) */
-  length?: number;
-  /** Timestamp when the operation was created */
+  /** New block type (for create/update operations) */
+  blockType?: NoteBlock["type"];
+  /** New order position (for move operations) */
+  order?: number;
+  /** Base version of the block when operation was created */
+  baseVersion: number;
+  /** Timestamp of the operation */
   timestamp: Date;
 }
 
 /**
- * Represents the minimal note information needed for display
- * @remarks Used when listing notes or showing previews
+ * Represents a batch of operations on a note
+ * @remarks Used when sending operations to the server
  */
-export type NoteBasicInfo = Pick<
-  Note,
-  "id" | "title" | "creator" | "updatedAt"
->;
+export interface NoteOperationBatch {
+  /** Note ID */
+  noteId: string;
+  /** User making the changes */
+  userId: string;
+  /** Array of block operations */
+  operations: BlockOperation[];
+  /** Current note version */
+  baseVersion: number;
+}
