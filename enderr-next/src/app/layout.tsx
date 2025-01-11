@@ -1,10 +1,9 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 
+import { ClientBoundary } from '@/components/client-boundary';
 import { Header } from '@/components/header';
-import { ThemeProvider } from '@/components/theme-provider';
-import { cn } from '@/lib/utils';
-import { QueryProvider } from '@/providers/query-provider';
+import { RootProvider } from '@/providers/root-provider';
 
 import './globals.css';
 
@@ -12,9 +11,13 @@ const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: 'Enderr',
-  description: 'Weekly calendar with collaborative notes',
+  description: 'Simple calendar application',
 };
 
+/**
+ * Root Layout
+ * @remarks Wraps the entire app with necessary providers and global components
+ */
 export default function RootLayout({
   children,
 }: {
@@ -30,20 +33,15 @@ export default function RootLayout({
           src="https://accounts.google.com/gsi/client"
           async
           defer
-        ></script>
+        />
       </head>
-      <body className={cn(inter.className)}>
-        <QueryProvider>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
-          >
+      <body className={inter.className}>
+        <ClientBoundary>
+          <RootProvider>
             <Header />
             {children}
-          </ThemeProvider>
-        </QueryProvider>
+          </RootProvider>
+        </ClientBoundary>
       </body>
     </html>
   );

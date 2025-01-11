@@ -2,6 +2,10 @@
 
 import { useEffect } from 'react';
 
+import { useRouter } from 'next/navigation';
+
+import { useSetRecoilState } from 'recoil';
+
 import {
   Card,
   CardContent,
@@ -9,6 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { accessTokenAtom } from '@/stores/auth';
 
 // Enhanced type declarations for Google Identity Services
 declare global {
@@ -51,6 +56,9 @@ declare global {
  * - Uses 'standard' type to enable personalization
  */
 export default function SignInForm() {
+  const router = useRouter();
+  const setAccessToken = useSetRecoilState(accessTokenAtom);
+
   useEffect(() => {
     const handleCredentialResponse = async (response: {
       credential: string;
@@ -74,6 +82,22 @@ export default function SignInForm() {
             `Authentication failed: ${data.message || res.statusText}`,
           );
         }
+
+        // Get access token from cookies
+        const cookies = document.cookie.split(';');
+        const accessToken = cookies
+          .find((c) => c.trim().startsWith('access_token='))
+          ?.split('=')[1];
+
+        if (!accessToken) {
+          throw new Error('No access token found in cookies');
+        }
+
+        // Set access token in Recoil state
+        setAccessToken(accessToken);
+
+        // Redirect to home page
+        router.push('/');
       } catch (error) {
         console.error('Authentication error:', error);
         // TODO: Show error message to user

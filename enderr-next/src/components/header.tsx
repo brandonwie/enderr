@@ -3,12 +3,12 @@
 import { useTheme } from 'next-themes';
 import { useRouter } from 'next/navigation';
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Moon, Sun, LogOut } from 'lucide-react';
+import { LogOut, Moon, Sun } from 'lucide-react';
+import { useRecoilValue, useSetRecoilState } from 'recoil';
 
 import { Button } from '@/components/ui/button';
-import { useCurrentUser } from '@/hooks/use-current-user';
 import { apiClient, API_ENDPOINTS } from '@/lib/api-client';
+import { currentUserSelector, accessTokenAtom } from '@/stores/auth';
 
 /**
  * Header component
@@ -17,33 +17,30 @@ import { apiClient, API_ENDPOINTS } from '@/lib/api-client';
 export function Header() {
   const { theme, setTheme } = useTheme();
   const router = useRouter();
-  const queryClient = useQueryClient();
-  const { user, isLoading } = useCurrentUser();
+  const user = useRecoilValue(currentUserSelector);
+  const setAccessToken = useSetRecoilState(accessTokenAtom);
 
-  const signOutMutation = useMutation({
-    mutationFn: async () => {
+  const handleSignOut = async () => {
+    try {
       await apiClient.post(API_ENDPOINTS.auth.signOut());
-    },
-    onSuccess: () => {
-      // Invalidate and reset user query
-      queryClient.setQueryData(['auth', 'user'], { user: null });
-      queryClient.invalidateQueries({ queryKey: ['auth', 'user'] });
-      // Redirect to sign-in page
+      // Clear access token which will update currentUserSelector
+      setAccessToken(null);
       router.push('/signin');
-    },
-  });
+    } catch (error) {
+      console.error('Sign out failed:', error);
+    }
+  };
 
   return (
     <header className="sticky top-0 z-10 w-full border-b bg-background/95 px-16 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="flex h-14 items-center justify-between">
         <div className="font-bold">Enderr</div>
         <div className="flex items-center gap-2">
-          {!isLoading && user && (
+          {user && (
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => signOutMutation.mutate()}
-              disabled={signOutMutation.isPending}
+              onClick={handleSignOut}
               title="Sign out"
             >
               <LogOut className="h-5 w-5" />

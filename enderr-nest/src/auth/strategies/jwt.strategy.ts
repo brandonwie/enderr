@@ -4,14 +4,20 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import { PrismaService } from '../../prisma.service';
+import { CustomLogger } from '../../logger/logger.service';
 
 interface JwtPayload {
   sub: string;
 }
 
-// NOTE The strategy is registered with Passport using the 'jwt' name
+/**
+ * JWT Strategy for Passport
+ * @remarks Extracts and validates JWT tokens from cookies
+ */
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
+  private readonly logger = new CustomLogger(this.configService);
+
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
@@ -19,27 +25,38 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
         (request: Request) => {
-          return request?.cookies?.access_token;
+          const token = request?.cookies?.access_token;
+          this.logger.debug('Extracting token from cookies', {
+            token: token ? 'present' : 'missing',
+            cookies: request.cookies,
+          });
+          return token;
         },
       ]),
       ignoreExpiration: false,
       secretOrKey: configService.get<string>('JWT_SECRET'),
     });
+    this.logger.setContext('JwtStrategy');
   }
 
   /**
    * Validate JWT payload and return user
-   * @param payload JWT payload with user ID   * NOTE The validate method is called by Passport after token verification
+   * @param payload JWT payload with user ID
+   * @remarks Called by Passport after token verification
    */
   async validate(payload: JwtPayload) {
+    this.logger.debug('Validating JWT payload', { payload });
+
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
     });
 
     if (!user) {
+      this.logger.warn('User not found for JWT payload', { payload });
       throw new UnauthorizedException('User not found');
     }
 
+    this.logger.debug('JWT validation successful', { userId: user.id });
     return user;
   }
 }
