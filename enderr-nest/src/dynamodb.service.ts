@@ -328,17 +328,4 @@ export class DynamoDBService implements OnModuleInit, OnModuleDestroy {
         .promise();
     }
   }
-
-  /**
-   * Check if DynamoDB connection is healthy
-   * @returns true if connection is healthy, false otherwise
-   */
-  async isHealthy(): Promise<boolean> {
-    try {
-      await this.client.scan({ TableName: this.tableName, Limit: 1 }).promise();
-      return true;
-    } catch (error) {
-      return false;
-    }
-  }
 }
