@@ -10,7 +10,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { useAuth } from '@/contexts/auth-context';
 
 // Enhanced type declarations for Google Identity Services
 declare global {
@@ -54,7 +53,6 @@ declare global {
  */
 export default function SignInForm() {
   const router = useRouter();
-  const { setUser } = useAuth();
 
   const handleCredentialResponse = async (response: { credential: string }) => {
     const endpoint = `${process.env.NEXT_PUBLIC_API_URL}/auth/google/callback`;
@@ -71,18 +69,12 @@ export default function SignInForm() {
 
       const data = await res.json();
 
-      console.log(data);
-
       if (!res.ok) {
         throw new Error(
           `Authentication failed: ${data.message || res.statusText}`,
         );
       }
 
-      // Set user data in context
-      setUser(data.user);
-
-      // Redirect to home page
       router.push('/');
     } catch (error) {
       console.error('Authentication error:', error);

@@ -6,12 +6,11 @@ import {
   useContext,
   useEffect,
   useState,
-  type PropsWithChildren,
 } from 'react';
 
 import { usePathname, useRouter } from 'next/navigation';
 
-import { apiClient, API_ENDPOINTS } from '@/lib/api-client';
+import axios from 'axios';
 
 interface AuthUser {
   id: string;
@@ -23,21 +22,15 @@ interface AuthUser {
 interface AuthContextType {
   user: AuthUser | null;
   loading: boolean;
-  signOut: () => Promise<void>;
   setUser: (user: AuthUser | null) => void;
+  signOut: () => Promise<void>;
 }
 
-/**
- * Auth Context
- * @remarks Provides authentication state and methods throughout the app
- */
 const AuthContext = createContext<AuthContextType | null>(null);
 
-/**
- * Auth Provider Component
- * @remarks Manages authentication state and provides auth methods
- */
-export function AuthProvider({ children }: PropsWithChildren) {
+const PUBLIC_PATHS = ['/', '/signin'];
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -45,7 +38,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const signOut = useCallback(async () => {
     try {
-      await apiClient.post(API_ENDPOINTS.auth.signOut());
+      await axios.post('/api/auth/signout');
       setUser(null);
       router.push('/signin');
     } catch (error) {
@@ -53,35 +46,39 @@ export function AuthProvider({ children }: PropsWithChildren) {
     }
   }, [router]);
 
-  useEffect(() => {
-    const initAuth = async () => {
-      try {
-        const { data } = await apiClient.get(API_ENDPOINTS.auth.me());
-        if (data.user) {
-          setUser(data.user);
-        }
-      } catch {
-        // Handle error silently - user is not authenticated
-      } finally {
-        setLoading(false);
-      }
-    };
+  const initAuth = useCallback(async () => {
+    console.log('initAuth...');
+    try {
+      // Only fetch user data if we have an access token
+      const { data } = await axios.get<{ user: AuthUser }>('/api/auth/me');
+      setUser(data.user);
 
+      // If we're on the sign-in page and authenticated, redirect to home
+      if (pathname === '/signin') {
+        router.push('/');
+      }
+    } catch (error) {
+      console.error('Auth initialization failed:', error);
+      setUser(null);
+      if (!PUBLIC_PATHS.includes(pathname)) {
+        router.push('/signin');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [pathname, router]);
+
+  useEffect(() => {
     initAuth();
-  }, [pathname]);
+  }, [initAuth]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, signOut, setUser }}>
+    <AuthContext.Provider value={{ user, loading, setUser, signOut }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
-/**
- * useAuth hook
- * @remarks Provides access to auth context
- * @throws {Error} If used outside of AuthProvider
- */
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {

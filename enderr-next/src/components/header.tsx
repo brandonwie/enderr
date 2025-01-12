@@ -10,33 +10,13 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/auth-context';
 
 /**
- * AuthenticatedActions component
- * @remarks Contains actions that require authentication (sign out button)
- */
-function AuthenticatedActions() {
-  const { user, signOut } = useAuth();
-
-  if (!user) return null;
-
-  return (
-    <Button
-      variant="ghost"
-      size="icon"
-      onClick={signOut}
-      title="Sign out"
-    >
-      <LogOut className="h-5 w-5" />
-      <span className="sr-only">Sign out</span>
-    </Button>
-  );
-}
-
-/**
  * Header component
  * @remarks Shows on all pages, contains theme toggle and sign-out button when authenticated
  */
 export function Header() {
+  const { user, signOut } = useAuth();
   const { theme, setTheme } = useTheme();
+  // to resolve string hydration mismatch
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -48,7 +28,17 @@ export function Header() {
       <div className="flex h-14 items-center justify-between">
         <div className="font-bold">Enderr</div>
         <div className="flex items-center gap-2">
-          <AuthenticatedActions />
+          {user && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={signOut}
+              title="Sign out"
+            >
+              <LogOut className="h-5 w-5" />
+              <span className="sr-only">Sign out</span>
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"
