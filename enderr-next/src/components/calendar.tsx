@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 
 import {
   DndContext,
@@ -74,6 +74,42 @@ function TimeSlot({
       } ${isOver ? 'bg-primary/10' : ''} ${active ? 'relative z-10' : ''}`}
       onClick={onClick}
     />
+  );
+}
+
+/**
+ * CurrentTimeIndicator Component
+ * @remarks
+ * Shows the current time as a line across the calendar
+ * Updates every minute
+ * Includes a circle on the left border
+ */
+function CurrentTimeIndicator() {
+  const [now, setNow] = useState(new Date());
+
+  // Update current time every minute
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNow(new Date());
+    }, 300000); // 300000ms = 5 minutes
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Calculate position based on current time
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  const top = (minutes / 30) * 20; // 20px per 30min slot
+
+  return (
+    <div
+      className="pointer-events-none absolute left-0 right-0 z-50"
+      style={{ top: `${top}px` }}
+    >
+      {/* Circle on the left */}
+      <div className="absolute -left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-red-500" />
+      {/* Line across */}
+      <div className="absolute left-0 right-0 top-1/2 border-t border-red-500" />
+    </div>
   );
 }
 
@@ -263,6 +299,42 @@ export function Calendar() {
     setNewSchedule(null);
   };
 
+  // Listen for schedule updates
+  useEffect(() => {
+    const handleScheduleUpdate = (e: Event) => {
+      const {
+        id,
+        startTime,
+        endTime,
+        title,
+        description,
+        location,
+        meetingLink,
+      } = (e as CustomEvent).detail;
+
+      setSchedules((prev) =>
+        prev.map((schedule) => {
+          if (schedule.id === id) {
+            return {
+              ...schedule,
+              startTime: new Date(startTime),
+              endTime: new Date(endTime),
+              title,
+              description,
+              location,
+              meetingLink,
+            };
+          }
+          return schedule;
+        }),
+      );
+    };
+
+    document.addEventListener('scheduleUpdate', handleScheduleUpdate);
+    return () =>
+      document.removeEventListener('scheduleUpdate', handleScheduleUpdate);
+  }, []);
+
   return (
     <DndContext
       sensors={sensors}
@@ -275,35 +347,37 @@ export function Calendar() {
     >
       <div className="relative flex h-full flex-col overflow-hidden">
         {/* Calendar Header */}
-        <div className="flex">
+        <div className="grid grid-cols-[3rem_1fr] pr-4">
           {/* Time gutter */}
-          <div className="w-16" />
+          <div className="w-12" />
           {/* Day columns */}
-          {weekDays.map(({ dayName, dayNumber, isToday }, index) => (
-            <div
-              key={dayNumber}
-              className={`flex-1 p-2 text-center ${
-                isToday ? 'bg-primary/5' : ''
-              } ${index === 0 ? 'rounded-tl-lg' : ''} ${
-                index === weekDays.length - 1 ? 'rounded-tr-lg' : ''
-              }`}
-            >
-              <div className="text-sm font-medium">{dayName}</div>
+          <div className="grid grid-cols-7">
+            {weekDays.map(({ dayName, dayNumber, isToday }, index) => (
               <div
-                className={`text-xl ${
-                  isToday ? 'text-primary' : 'text-muted-foreground'
+                key={dayNumber}
+                className={`flex flex-col items-center justify-center p-2 ${
+                  isToday ? 'bg-primary/5' : ''
+                } ${index === 0 ? 'rounded-tl-lg' : ''} ${
+                  index === weekDays.length - 1 ? 'rounded-tr-lg' : ''
                 }`}
               >
-                {dayNumber}
+                <div className="text-sm font-medium">{dayName}</div>
+                <div
+                  className={`text-xl ${
+                    isToday ? 'text-primary' : 'text-muted-foreground'
+                  }`}
+                >
+                  {dayNumber}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
 
-        {/* Calendar Grid */}
+        {/* Calendar Body */}
         <div className="relative flex flex-1 overflow-auto pt-4">
-          {/* Time labels */}
-          <div className="sticky left-0 w-16 border-r bg-background">
+          {/* Time Labels */}
+          <div className="sticky left-0 z-30 w-12 bg-background">
             {timeSlots.map(({ hour, label }) => (
               <div
                 key={hour}
@@ -314,47 +388,55 @@ export function Calendar() {
             ))}
           </div>
 
-          {/* Time grid */}
-          <div className="relative flex flex-1 divide-x divide-border">
-            {weekDays.map(({ date, dayNumber, isToday }) => (
-              <div
-                key={dayNumber}
-                className={`relative flex-1 ${isToday ? 'bg-primary/5' : ''}`}
-                style={{ minHeight: 'fit-content' }}
-              >
-                {timeSlots.map(({ hour }) => (
-                  <div
-                    key={hour}
-                    className="border-border"
-                  >
-                    {/* Upper half (XX:00) */}
-                    <TimeSlot
-                      id={`${date.getTime()}-${hour}-0`}
-                      onClick={(e) => handleCellClick(e, date, hour)}
-                      isHalfHour={false}
-                    />
-                    {/* Lower half (XX:30) */}
-                    <TimeSlot
-                      id={`${date.getTime()}-${hour}-30`}
-                      onClick={(e) => handleCellClick(e, date, hour)}
-                      isHalfHour={true}
-                    />
-                  </div>
-                ))}
+          {/* Time Grid */}
+          <div className="relative flex flex-1">
+            <div className="grid flex-1 grid-cols-7 divide-x divide-border">
+              {weekDays.map((day) => (
+                <div
+                  key={day.date.toISOString()}
+                  className="relative"
+                  style={{ minHeight: 'fit-content' }}
+                >
+                  {/* Add CurrentTimeIndicator only for today's column */}
+                  {day.isToday && <CurrentTimeIndicator />}
 
-                {/* Render schedules for this day */}
-                {schedules
-                  .filter((schedule) => isSameDay(schedule.startTime, date))
-                  .map((schedule) =>
-                    schedule.id !== activeId ? (
-                      <ScheduleCell
-                        key={schedule.id}
-                        {...schedule}
+                  {/* Time Slots */}
+                  {timeSlots.map((slot) => (
+                    <div
+                      key={slot.hour}
+                      className="border-border"
+                    >
+                      {/* Upper half (XX:00) */}
+                      <TimeSlot
+                        id={`${day.date.getTime()}-${slot.hour}-0`}
+                        onClick={(e) => handleCellClick(e, day.date, slot.hour)}
+                        isHalfHour={false}
                       />
-                    ) : null,
-                  )}
-              </div>
-            ))}
+                      {/* Lower half (XX:30) */}
+                      <TimeSlot
+                        id={`${day.date.getTime()}-${slot.hour}-30`}
+                        onClick={(e) => handleCellClick(e, day.date, slot.hour)}
+                        isHalfHour={true}
+                      />
+                    </div>
+                  ))}
+
+                  {/* Render schedules for this day */}
+                  {schedules
+                    .filter((schedule) =>
+                      isSameDay(schedule.startTime, day.date),
+                    )
+                    .map((schedule) =>
+                      schedule.id !== activeId ? (
+                        <ScheduleCell
+                          key={schedule.id}
+                          {...schedule}
+                        />
+                      ) : null,
+                    )}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
