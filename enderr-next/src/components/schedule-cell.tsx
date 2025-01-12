@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
+import { ScheduleStatus } from '@shared/types/schedule';
 import { format } from 'date-fns';
 
 import { ScheduleForm, ScheduleFormValues } from '@/components/schedule-form';
@@ -21,6 +22,8 @@ interface ScheduleCellProps {
   description?: string;
   location?: string;
   meetingLink?: string;
+  /** Current status of the schedule */
+  status: ScheduleStatus;
   isDragging?: boolean;
 }
 
@@ -32,6 +35,7 @@ export function ScheduleCell({
   description,
   location,
   meetingLink,
+  status = ScheduleStatus.SCHEDULED,
   isDragging,
 }: ScheduleCellProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -193,6 +197,7 @@ export function ScheduleCell({
               location,
               meetingLink,
               participants: '',
+              status,
             }}
             onSubmit={handleSubmit}
             onDelete={handleDelete}

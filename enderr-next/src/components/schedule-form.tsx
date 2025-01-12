@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 
 import { zodResolver } from '@hookform/resolvers/zod';
+import { ScheduleStatus } from '@shared/types/schedule';
 import * as z from 'zod';
 
 import { Button } from '@/components/ui/button';
@@ -32,6 +33,8 @@ const baseScheduleSchema = {
   location: z.string().optional(),
   meetingLink: z.string().url().optional().or(z.literal('')),
   participants: z.string().optional(),
+  /** Status of the schedule */
+  status: z.nativeEnum(ScheduleStatus),
 };
 
 // Schema for creating new schedule (only time fields required initially)

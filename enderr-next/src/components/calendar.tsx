@@ -13,6 +13,8 @@ import {
   useSensors,
   closestCenter,
 } from '@dnd-kit/core';
+/** Schedule status enum imported from shared types */
+import { ScheduleStatus } from '@shared/types/schedule';
 import { addDays, addMinutes, format, isSameDay, startOfWeek } from 'date-fns';
 
 import { ScheduleCell } from '@/components/schedule-cell';
@@ -31,6 +33,8 @@ interface NewSchedule {
   description?: string;
   location?: string;
   meetingLink?: string;
+  /** Current status of the schedule */
+  status: ScheduleStatus;
 }
 
 // Full schedule type with ID for saved schedules
@@ -149,6 +153,7 @@ export function Calendar() {
       })(),
       title: 'Example Meeting',
       location: 'Conference Room',
+      status: ScheduleStatus.SCHEDULED,
     },
   ]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -183,6 +188,7 @@ export function Calendar() {
         title: '',
         startTime,
         endTime,
+        status: ScheduleStatus.SCHEDULED,
       },
     ]);
     setNewScheduleId(id);
