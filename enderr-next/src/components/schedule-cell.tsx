@@ -176,22 +176,28 @@ export function ScheduleCell({
         </div>
       </PopoverTrigger>
 
-      <PopoverContent className="w-80">
-        <ScheduleForm
-          mode="edit"
-          defaultValues={{
-            title,
-            description,
-            date: startTime,
-            startTime: format(startTime, 'HH:mm'),
-            endTime: format(endTime, 'HH:mm'),
-            location,
-            meetingLink,
-            participants: '',
-          }}
-          onSubmit={handleSubmit}
-          onDelete={handleDelete}
-        />
+      <PopoverContent
+        side="right"
+        align="center"
+        className="w-80"
+      >
+        <div className="max-h-[calc(100vh-4rem)] overflow-y-auto">
+          <ScheduleForm
+            mode="edit"
+            defaultValues={{
+              title,
+              description,
+              date: startTime,
+              startTime: format(startTime, 'HH:mm'),
+              endTime: format(endTime, 'HH:mm'),
+              location,
+              meetingLink,
+              participants: '',
+            }}
+            onSubmit={handleSubmit}
+            onDelete={handleDelete}
+          />
+        </div>
       </PopoverContent>
     </Popover>
   );

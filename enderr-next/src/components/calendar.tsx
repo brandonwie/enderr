@@ -478,33 +478,35 @@ export function Calendar() {
       >
         <PopoverTrigger className="hidden" />
         <PopoverContent className="w-80">
-          <ScheduleForm
-            mode="create"
-            defaultValues={{
-              title: '',
-              date:
-                schedules.find((s) => s.id === newScheduleId)?.startTime ||
-                new Date(),
-              startTime:
-                schedules
-                  .find((s) => s.id === newScheduleId)
-                  ?.startTime.toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: false,
-                  }) || '',
-              endTime:
-                schedules
-                  .find((s) => s.id === newScheduleId)
-                  ?.endTime.toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: false,
-                  }) || '',
-            }}
-            onSubmit={handleCreateSchedule}
-            onCancel={handleCancelCreate}
-          />
+          <div className="max-h-[calc(100vh-4rem)] overflow-y-auto">
+            <ScheduleForm
+              mode="create"
+              defaultValues={{
+                title: '',
+                date:
+                  schedules.find((s) => s.id === newScheduleId)?.startTime ||
+                  new Date(),
+                startTime:
+                  schedules
+                    .find((s) => s.id === newScheduleId)
+                    ?.startTime.toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: false,
+                    }) || '',
+                endTime:
+                  schedules
+                    .find((s) => s.id === newScheduleId)
+                    ?.endTime.toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: false,
+                    }) || '',
+              }}
+              onSubmit={handleCreateSchedule}
+              onCancel={handleCancelCreate}
+            />
+          </div>
         </PopoverContent>
       </Popover>
     </DndContext>
