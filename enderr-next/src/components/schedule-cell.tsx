@@ -1,66 +1,18 @@
 'use client';
 
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
 
 import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { zodResolver } from '@hookform/resolvers/zod';
 import { format } from 'date-fns';
-import * as z from 'zod';
 
-import { Button } from '@/components/ui/button';
-import { Calendar } from '@/components/ui/calendar';
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
+import { ScheduleForm, ScheduleFormValues } from '@/components/schedule-form';
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
 
-/**
- * Form schema for schedule editing
- * @remarks
- * - Time inputs are in HH:mm format
- * - Date is selected via calendar
- * - Participants are comma-separated emails
- */
-const scheduleFormSchema = z.object({
-  title: z.string().min(1, 'Title is required'),
-  description: z.string().optional(),
-  date: z.date(),
-  startTime: z
-    .string()
-    .regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Invalid time format'),
-  endTime: z
-    .string()
-    .regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Invalid time format'),
-  location: z.string().optional(),
-  meetingLink: z.string().url().optional().or(z.literal('')),
-  participants: z.string().optional(),
-});
-
-type ScheduleFormValues = z.infer<typeof scheduleFormSchema>;
-
-/**
- * Props for the ScheduleCell component
- * @property id - Unique identifier for the schedule
- * @property startTime - When the schedule starts
- * @property endTime - When the schedule ends
- * @property title - Title of the schedule
- * @property description - Optional detailed description
- * @property location - Optional physical location
- * @property meetingLink - Optional virtual meeting link
- * @property isDragging - Whether this cell is currently being dragged
- */
 interface ScheduleCellProps {
   id: string;
   startTime: Date;
@@ -72,19 +24,6 @@ interface ScheduleCellProps {
   isDragging?: boolean;
 }
 
-/**
- * ScheduleCell Component
- * @remarks
- * Represents a schedule item in the calendar grid
- * - Default height is 30 minutes (h-10)
- * - Draggable within the calendar
- * - Shows quick actions in popover
- * - Opens edit form in popover on click
- *
- * @todo
- * - Add color coding for different types of schedules
- * - Add resize handles for duration adjustment
- */
 export function ScheduleCell({
   id,
   startTime,
@@ -95,23 +34,7 @@ export function ScheduleCell({
   meetingLink,
   isDragging,
 }: ScheduleCellProps) {
-  // State for popover visibility
   const [isOpen, setIsOpen] = useState(false);
-
-  // Initialize form with current values
-  const form = useForm<ScheduleFormValues>({
-    resolver: zodResolver(scheduleFormSchema),
-    defaultValues: {
-      title,
-      description: description || '',
-      date: startTime,
-      startTime: format(startTime, 'HH:mm'),
-      endTime: format(endTime, 'HH:mm'),
-      location: location || '',
-      meetingLink: meetingLink || '',
-      participants: '',
-    },
-  });
 
   // Set up draggable functionality
   const {
@@ -142,8 +65,7 @@ export function ScheduleCell({
         transform: CSS.Transform.toString(transform),
       };
 
-  // Handle form submission
-  const onSubmit = async (data: ScheduleFormValues) => {
+  const handleSubmit = async (data: ScheduleFormValues) => {
     try {
       // Combine date and time to create new Date objects
       const [hours, minutes] = data.startTime.split(':').map(Number);
@@ -157,11 +79,7 @@ export function ScheduleCell({
 
       // Validate time range
       if (newEndTime <= newStartTime) {
-        form.setError('endTime', {
-          type: 'manual',
-          message: 'End time must be after start time',
-        });
-        return;
+        throw new Error('End time must be after start time');
       }
 
       // TODO: API integration
@@ -187,6 +105,36 @@ export function ScheduleCell({
       setIsOpen(false);
     } catch (error) {
       console.error('Failed to update schedule:', error);
+      // TODO: Show error toast when we add toast notifications
+    }
+  };
+
+  const handleDelete = async () => {
+    try {
+      // TODO: API integration
+      // const response = await deleteSchedule(id);
+
+      // For now, emit a delete event that the parent can listen to
+      const event = new CustomEvent('scheduleDelete', {
+        detail: {
+          id,
+          // Include all schedule data for potential undo functionality
+          schedule: {
+            title,
+            description,
+            startTime,
+            endTime,
+            location,
+            meetingLink,
+          },
+        },
+        bubbles: true,
+      });
+      document.dispatchEvent(event);
+
+      setIsOpen(false);
+    } catch (error) {
+      console.error('Failed to delete schedule:', error);
       // TODO: Show error toast when we add toast notifications
     }
   };
@@ -229,166 +177,21 @@ export function ScheduleCell({
       </PopoverTrigger>
 
       <PopoverContent className="w-80">
-        <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(onSubmit)}
-            className="space-y-4"
-          >
-            <FormField
-              control={form.control}
-              name="title"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Title</FormLabel>
-                  <FormControl>
-                    <Input {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Description</FormLabel>
-                  <FormControl>
-                    <Input {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="date"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Date</FormLabel>
-                  <FormControl>
-                    <Calendar
-                      mode="single"
-                      selected={field.value}
-                      onSelect={field.onChange}
-                      disabled={(date) => date < new Date('1900-01-01')}
-                      initialFocus
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="flex gap-2">
-              <FormField
-                control={form.control}
-                name="startTime"
-                render={({ field }) => (
-                  <FormItem className="flex-1">
-                    <FormLabel>Start Time</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        placeholder="HH:mm"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="endTime"
-                render={({ field }) => (
-                  <FormItem className="flex-1">
-                    <FormLabel>End Time</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        placeholder="HH:mm"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <FormField
-              control={form.control}
-              name="location"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Location</FormLabel>
-                  <FormControl>
-                    <Input {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="meetingLink"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Meeting Link</FormLabel>
-                  <FormControl>
-                    <Input
-                      {...field}
-                      type="url"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="participants"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Participants (comma-separated emails)</FormLabel>
-                  <FormControl>
-                    <Input
-                      {...field}
-                      placeholder="user@example.com, user2@example.com"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="flex justify-between">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="text-destructive"
-                onClick={() => {
-                  // TODO: Implement delete
-                  console.log('Delete schedule:', id);
-                  setIsOpen(false);
-                }}
-              >
-                Delete
-              </Button>
-              <Button
-                type="submit"
-                size="sm"
-              >
-                Save Changes
-              </Button>
-            </div>
-          </form>
-        </Form>
+        <ScheduleForm
+          mode="edit"
+          defaultValues={{
+            title,
+            description,
+            date: startTime,
+            startTime: format(startTime, 'HH:mm'),
+            endTime: format(endTime, 'HH:mm'),
+            location,
+            meetingLink,
+            participants: '',
+          }}
+          onSubmit={handleSubmit}
+          onDelete={handleDelete}
+        />
       </PopoverContent>
     </Popover>
   );

@@ -16,16 +16,12 @@ import {
 import { addDays, addMinutes, format, isSameDay, startOfWeek } from 'date-fns';
 
 import { ScheduleCell } from '@/components/schedule-cell';
-import { Button } from '@/components/ui/button';
+import { ScheduleForm, ScheduleFormValues } from '@/components/schedule-form';
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 
 // Base schedule type without ID
 interface NewSchedule {
@@ -133,10 +129,8 @@ export function Calendar() {
   const today = useMemo(() => new Date(), []);
   const weekStart = startOfWeek(today);
 
-  // State for new schedule creation dialog
-  const [showDialog, setShowDialog] = useState(false);
-  const [dialogPosition, setDialogPosition] = useState({ x: 0, y: 0 });
-  const [newSchedule, setNewSchedule] = useState<NewSchedule | null>(null);
+  // State for new schedule creation
+  const [newScheduleId, setNewScheduleId] = useState<string | null>(null);
 
   // State for schedules and drag & drop
   const [schedules, setSchedules] = useState<Schedule[]>([
@@ -173,39 +167,66 @@ export function Calendar() {
     setActiveId(event.active.id as string);
   };
 
-  // Handle clicking a time slot to create a new schedule
+  // Handle cell click for new schedule
   const handleCellClick = (e: React.MouseEvent, date: Date, hour: number) => {
-    // Get the clicked element's position relative to the viewport
-    const rect = (e.target as HTMLElement).getBoundingClientRect();
-
-    // Calculate click position within the cell:
-    // e.clientY: Mouse position from top of viewport
-    // rect.top: Cell's distance from top of viewport
-    // This gives us the exact pixel where user clicked inside the cell
-    const y = e.clientY - rect.top;
-
-    // NOTE: Critical for time slot detection
-    // Determine if click was in upper or lower half of the hour slot
-    // This affects whether we set minutes to :00 or :30
-    const isUpperHalf = y < rect.height / 2;
-
-    // Set start time based on which half of the hour slot was clicked
+    const id = crypto.randomUUID();
     const startTime = new Date(date);
-    startTime.setHours(hour, isUpperHalf ? 0 : 30, 0, 0);
-    const endTime = addMinutes(startTime, 30);
+    startTime.setHours(hour);
+    const endTime = new Date(startTime);
+    endTime.setMinutes(startTime.getMinutes() + 30);
 
-    setNewSchedule({
-      startTime,
-      endTime,
-      title: '',
-    });
+    // Create a temporary schedule
+    setSchedules((prev) => [
+      ...prev,
+      {
+        id,
+        title: '',
+        startTime,
+        endTime,
+      },
+    ]);
+    setNewScheduleId(id);
+  };
 
-    // Position the creation dialog next to the click
-    setDialogPosition({
-      x: e.clientX + 10, // 10px offset to prevent cursor from covering dialog
-      y: e.clientY,
-    });
-    setShowDialog(true);
+  // Handle new schedule submission
+  const handleCreateSchedule = (data: ScheduleFormValues) => {
+    const [hours, minutes] = data.startTime.split(':').map(Number);
+    const [endHours, endMinutes] = data.endTime.split(':').map(Number);
+
+    const startTime = new Date(data.date);
+    startTime.setHours(hours, minutes, 0);
+
+    const endTime = new Date(data.date);
+    endTime.setHours(endHours, endMinutes, 0);
+
+    if (endTime <= startTime) {
+      // TODO: Show error toast
+      console.error('End time must be after start time');
+      return;
+    }
+
+    setSchedules((prev) =>
+      prev.map((schedule) => {
+        if (schedule.id === newScheduleId) {
+          return {
+            ...schedule,
+            ...data,
+            startTime,
+            endTime,
+          };
+        }
+        return schedule;
+      }),
+    );
+    setNewScheduleId(null);
+  };
+
+  // Handle new schedule cancellation
+  const handleCancelCreate = () => {
+    setSchedules((prev) =>
+      prev.filter((schedule) => schedule.id !== newScheduleId),
+    );
+    setNewScheduleId(null);
   };
 
   // Handle dropping a schedule into a new time slot
@@ -285,54 +306,46 @@ export function Calendar() {
     [],
   );
 
-  // Create a new schedule from dialog input
-  const handleCreateSchedule = () => {
-    if (!newSchedule?.title) return;
-
-    const schedule: Schedule = {
-      id: crypto.randomUUID(),
-      ...newSchedule,
-    };
-
-    setSchedules((prev) => [...prev, schedule]);
-    setShowDialog(false);
-    setNewSchedule(null);
-  };
-
   // Listen for schedule updates
   useEffect(() => {
-    const handleScheduleUpdate = (e: Event) => {
-      const {
-        id,
-        startTime,
-        endTime,
-        title,
-        description,
-        location,
-        meetingLink,
-      } = (e as CustomEvent).detail;
-
+    const handleScheduleUpdate = (e: CustomEvent<Schedule>) => {
       setSchedules((prev) =>
-        prev.map((schedule) => {
-          if (schedule.id === id) {
-            return {
-              ...schedule,
-              startTime: new Date(startTime),
-              endTime: new Date(endTime),
-              title,
-              description,
-              location,
-              meetingLink,
-            };
-          }
-          return schedule;
-        }),
+        prev.map((schedule) =>
+          schedule.id === e.detail.id ? e.detail : schedule,
+        ),
       );
     };
 
-    document.addEventListener('scheduleUpdate', handleScheduleUpdate);
-    return () =>
-      document.removeEventListener('scheduleUpdate', handleScheduleUpdate);
+    // Listen for schedule deletions
+    const handleScheduleDelete = (
+      e: CustomEvent<{ id: string; schedule: Omit<Schedule, 'id'> }>,
+    ) => {
+      setSchedules((prev) =>
+        prev.filter((schedule) => schedule.id !== e.detail.id),
+      );
+      // TODO: Show toast notification with undo option
+      // TODO: Queue deletion for API call
+    };
+
+    document.addEventListener(
+      'scheduleUpdate',
+      handleScheduleUpdate as EventListener,
+    );
+    document.addEventListener(
+      'scheduleDelete',
+      handleScheduleDelete as EventListener,
+    );
+
+    return () => {
+      document.removeEventListener(
+        'scheduleUpdate',
+        handleScheduleUpdate as EventListener,
+      );
+      document.removeEventListener(
+        'scheduleDelete',
+        handleScheduleDelete as EventListener,
+      );
+    };
   }, []);
 
   return (
@@ -458,64 +471,42 @@ export function Calendar() {
         </DragOverlay>
       </div>
 
-      {/* New Schedule Dialog */}
-      <Dialog
-        open={showDialog}
-        onOpenChange={setShowDialog}
+      {/* New Schedule Popover */}
+      <Popover
+        open={newScheduleId !== null}
+        onOpenChange={(open) => !open && handleCancelCreate()}
       >
-        <DialogContent
-          style={{
-            position: 'absolute',
-            left: `${dialogPosition.x}px`,
-            top: `${dialogPosition.y}px`,
-          }}
-          className="w-[400px]"
-        >
-          <DialogHeader>
-            <DialogTitle>New Schedule</DialogTitle>
-          </DialogHeader>
-
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="title">Title</Label>
-              <Input
-                id="title"
-                value={newSchedule?.title ?? ''}
-                onChange={(e) =>
-                  setNewSchedule((prev) =>
-                    prev ? { ...prev, title: e.target.value } : null,
-                  )
-                }
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label>Time</Label>
-              <div className="text-sm">
-                {newSchedule?.startTime &&
-                  `${format(newSchedule.startTime, 'HH:mm')} - ${format(
-                    newSchedule.endTime,
-                    'HH:mm',
-                  )}`}
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowDialog(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleCreateSchedule}
-              disabled={!newSchedule?.title}
-            >
-              Create
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        <PopoverTrigger className="hidden" />
+        <PopoverContent className="w-80">
+          <ScheduleForm
+            mode="create"
+            defaultValues={{
+              title: '',
+              date:
+                schedules.find((s) => s.id === newScheduleId)?.startTime ||
+                new Date(),
+              startTime:
+                schedules
+                  .find((s) => s.id === newScheduleId)
+                  ?.startTime.toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false,
+                  }) || '',
+              endTime:
+                schedules
+                  .find((s) => s.id === newScheduleId)
+                  ?.endTime.toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false,
+                  }) || '',
+            }}
+            onSubmit={handleCreateSchedule}
+            onCancel={handleCancelCreate}
+          />
+        </PopoverContent>
+      </Popover>
     </DndContext>
   );
 }
