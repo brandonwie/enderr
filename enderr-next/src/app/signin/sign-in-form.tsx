@@ -71,6 +71,8 @@ export default function SignInForm() {
 
       const data = await res.json();
 
+      console.log(data);
+
       if (!res.ok) {
         throw new Error(
           `Authentication failed: ${data.message || res.statusText}`,

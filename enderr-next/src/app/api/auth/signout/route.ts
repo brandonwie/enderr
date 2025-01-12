@@ -11,11 +11,16 @@ import { serverApiClient, getAuthCookies } from '@/lib/server/api-client';
 export async function POST() {
   try {
     const authCookies = await getAuthCookies();
-    await serverApiClient.post('/auth/signout', null, {
-      headers: {
-        Cookie: authCookies,
+    console.log(authCookies);
+    await serverApiClient.post(
+      '/auth/signout',
+      {},
+      {
+        headers: {
+          Cookie: authCookies,
+        },
       },
-    });
+    );
 
     // Clear cookies in response
     const response = NextResponse.json({ success: true });
