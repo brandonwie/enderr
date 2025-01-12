@@ -51,6 +51,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       // Only fetch user data if we have an access token
       const { data } = await axios.get<{ user: AuthUser }>('/api/auth/me');
+      console.log('got user: ', data.user);
       setUser(data.user);
 
       // If we're on the sign-in page and authenticated, redirect to home

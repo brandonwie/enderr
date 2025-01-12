@@ -1,20 +1,21 @@
-import { redirect } from 'next/navigation';
+'use client';
 
-import { isAuthenticated, AUTH_ROUTES } from '@/lib/auth';
+import { Calendar } from '@/components/calendar';
+import { Sidebar } from '@/components/sidebar';
 
 /**
- * Home page
- * @remarks Redirects to sign in if not authenticated
+ * Home Page Component
+ * @remarks
+ * Main layout with:
+ * - Fixed width sidebar (256px)
+ * - Fluid calendar view that fills remaining space
+ * Uses CSS Grid for responsive layout
  */
 export default function Home() {
-  if (!isAuthenticated()) {
-    redirect(AUTH_ROUTES.signIn);
-  }
-
   return (
-    <main className="container mx-auto px-4 py-8">
-      <h1 className="text-4xl font-bold">Welcome to Enderr</h1>
-      {/* TODO: Add calendar and schedule components */}
+    <main className="grid h-[calc(100vh-3.5rem)] grid-cols-[256px_1fr]">
+      <Sidebar />
+      <Calendar />
     </main>
   );
 }
