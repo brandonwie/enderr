@@ -1,70 +1,128 @@
 'use client';
 
-import Image from 'next/image';
+import { useState, useEffect } from 'react';
 
-import { Plus } from 'lucide-react';
+import { ScheduleStatus } from '@shared/types/schedule';
 
+import { InboxForm, InboxItemValues } from '@/components/inbox-form';
+import { InboxSchedule } from '@/components/inbox-schedule';
 import { Button } from '@/components/ui/button';
-import { useAuth } from '@/contexts/auth-context';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
+
+interface InboxItem {
+  id: string;
+  title: string;
+  description?: string;
+  duration: number;
+  location?: string;
+  meetingLink?: string;
+  status: ScheduleStatus.INBOX;
+}
 
 /**
  * Sidebar Component
  * @remarks
  * Contains:
- * - User profile section (photo and name)
- * - Inbox section with draggable items
- * - Add task button
- *
- * @todo
- * - Implement drag and drop functionality
- * - Add task creation modal
- * - Add inbox item component
+ * - Inbox items that can be dragged to calendar
+ * - Button to create new inbox items
+ * - Scrollable list of inbox items
  */
 export function Sidebar() {
-  const { user } = useAuth();
+  const [open, setOpen] = useState(false);
+  // State for inbox items
+  const [inboxItems, setInboxItems] = useState<InboxItem[]>([
+    {
+      id: crypto.randomUUID(),
+      title: 'Review Project Plan',
+      description: 'Go through Q2 project timeline and milestones',
+      duration: 60,
+      status: ScheduleStatus.INBOX,
+    },
+    {
+      id: crypto.randomUUID(),
+      title: 'Team Sync',
+      description: 'Weekly team sync meeting',
+      duration: 30,
+      status: ScheduleStatus.INBOX,
+    },
+  ]);
+
+  // Listen for inbox item scheduled event
+  useEffect(() => {
+    const handleInboxItemScheduled = (event: CustomEvent) => {
+      const { id } = event.detail;
+      setInboxItems((prevItems) => prevItems.filter((item) => item.id !== id));
+    };
+
+    document.addEventListener(
+      'inboxItemScheduled',
+      handleInboxItemScheduled as EventListener,
+    );
+
+    return () => {
+      document.removeEventListener(
+        'inboxItemScheduled',
+        handleInboxItemScheduled as EventListener,
+      );
+    };
+  }, []);
+
+  const handleCreateInboxItem = (data: InboxItemValues) => {
+    const newItem: InboxItem = {
+      id: crypto.randomUUID(),
+      ...data,
+      status: ScheduleStatus.INBOX,
+    };
+
+    setInboxItems((prev) => [...prev, newItem]);
+    setOpen(false);
+  };
 
   return (
-    <aside className="flex h-full flex-col border-r">
-      {/* User Profile Section */}
-      <div className="flex items-center gap-3 border-b p-4">
-        <div className="relative h-10 w-10 overflow-hidden rounded-full">
-          {user?.picture ? (
-            <Image
-              src={user.picture}
-              alt={user.name}
-              fill
-              className="object-cover"
-            />
-          ) : null}
-        </div>
-        <span className="font-medium">{user?.name ?? ''}</span>
-      </div>
-
-      {/* Inbox Section */}
-      <div className="flex flex-1 flex-col">
-        <div className="flex items-center justify-between border-b p-4">
-          <h2 className="text-sm font-semibold">Inbox</h2>
-          <span className="text-xs text-muted-foreground">0</span>
-        </div>
-
-        {/* Add Task Button */}
-        <Button
-          variant="ghost"
-          className="m-2 justify-start gap-2"
-          onClick={() => {
-            // TODO: Open task creation modal
-            console.log('Add task clicked');
-          }}
+    <aside className="flex h-full flex-col border-r bg-card p-4">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Inbox</h2>
+        <Dialog
+          open={open}
+          onOpenChange={setOpen}
         >
-          <Plus className="h-4 w-4" />
-          Add a Task
-        </Button>
-
-        {/* Inbox Items List */}
-        <div className="flex-1 overflow-auto p-2">
-          {/* TODO: Add inbox items */}
-        </div>
+          <DialogTrigger asChild>
+            <Button
+              size="sm"
+              className="px-3"
+            >
+              Add Item
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add Inbox Item</DialogTitle>
+            </DialogHeader>
+            <InboxForm
+              onSubmit={handleCreateInboxItem}
+              onCancel={() => setOpen(false)}
+            />
+          </DialogContent>
+        </Dialog>
       </div>
+
+      <ScrollArea className="flex-1">
+        <div className="space-y-2 pr-4">
+          {inboxItems.map((item) => (
+            <InboxSchedule
+              key={item.id}
+              {...item}
+            />
+          ))}
+        </div>
+      </ScrollArea>
     </aside>
   );
 }

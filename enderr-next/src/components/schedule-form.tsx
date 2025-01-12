@@ -38,13 +38,39 @@ const baseScheduleSchema = {
 };
 
 // Schema for creating new schedule (only time fields required initially)
-export const createScheduleSchema = z.object(baseScheduleSchema);
+export const createScheduleSchema = z.object(baseScheduleSchema).refine(
+  (data) => {
+    const [startHours, startMinutes] = data.startTime.split(':').map(Number);
+    const [endHours, endMinutes] = data.endTime.split(':').map(Number);
+    const startTotal = startHours * 60 + startMinutes;
+    const endTotal = endHours * 60 + endMinutes;
+    return endTotal > startTotal;
+  },
+  {
+    message: 'End time must be after start time',
+    path: ['endTime'], // Show error on the end time field
+  },
+);
 
 // Schema for editing schedule (all fields required)
-export const editScheduleSchema = z.object({
-  ...baseScheduleSchema,
-  title: z.string().min(1, 'Title is required'),
-});
+export const editScheduleSchema = z
+  .object({
+    ...baseScheduleSchema,
+    title: z.string().min(1, 'Title is required'),
+  })
+  .refine(
+    (data) => {
+      const [startHours, startMinutes] = data.startTime.split(':').map(Number);
+      const [endHours, endMinutes] = data.endTime.split(':').map(Number);
+      const startTotal = startHours * 60 + startMinutes;
+      const endTotal = endHours * 60 + endMinutes;
+      return endTotal > startTotal;
+    },
+    {
+      message: 'End time must be after start time',
+      path: ['endTime'], // Show error on the end time field
+    },
+  );
 
 export type ScheduleFormValues = z.infer<typeof editScheduleSchema>;
 

@@ -2,18 +2,7 @@
 
 import { useMemo, useState, useEffect } from 'react';
 
-import {
-  DndContext,
-  DragEndEvent,
-  DragOverlay,
-  DragStartEvent,
-  PointerSensor,
-  useDroppable,
-  useSensor,
-  useSensors,
-  closestCenter,
-} from '@dnd-kit/core';
-/** Schedule status enum imported from shared types */
+import { useDroppable } from '@dnd-kit/core';
 import { ScheduleStatus } from '@shared/types/schedule';
 import { addDays, addMinutes, format, isSameDay, startOfWeek } from 'date-fns';
 
@@ -38,8 +27,27 @@ interface NewSchedule {
 }
 
 // Full schedule type with ID for saved schedules
-interface Schedule extends NewSchedule {
+interface Schedule {
   id: string;
+  title: string;
+  description?: string;
+  startTime: Date;
+  endTime: Date;
+  location?: string;
+  meetingLink?: string;
+  status: ScheduleStatus;
+}
+
+interface DayHeaderProps {
+  dayName: string;
+  dayNumber: number;
+  isToday: boolean;
+  index: number;
+}
+
+interface TimeSlotProps {
+  hour: number;
+  label: string;
 }
 
 /**
@@ -121,12 +129,6 @@ function CurrentTimeIndicator() {
  * - Day columns (Sun-Mon)
  * - Current time indicator
  * - Draggable schedule items
- *
- * @todo
- * - Add current time indicator
- * - Implement drag and drop zones
- * - Add schedule items rendering
- * - Add schedule item creation on drop
  */
 export function Calendar() {
   // Memoized current date to prevent unnecessary re-renders
@@ -136,11 +138,11 @@ export function Calendar() {
   // State for new schedule creation
   const [newScheduleId, setNewScheduleId] = useState<string | null>(null);
 
-  // State for schedules and drag & drop
+  // State for schedules
   const [schedules, setSchedules] = useState<Schedule[]>([
     // Example schedule for demonstration
     {
-      id: '1',
+      id: crypto.randomUUID(),
       startTime: (() => {
         const date = new Date();
         date.setHours(10, 0, 0, 0);
@@ -156,21 +158,6 @@ export function Calendar() {
       status: ScheduleStatus.SCHEDULED,
     },
   ]);
-  const [activeId, setActiveId] = useState<string | null>(null);
-
-  // Configure drag sensors with a minimum drag distance
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8, // Require 8px of movement before starting drag
-      },
-    }),
-  );
-
-  // Track which schedule is being dragged
-  const handleDragStart = (event: DragStartEvent) => {
-    setActiveId(event.active.id as string);
-  };
 
   // Handle cell click for new schedule
   const handleCellClick = (e: React.MouseEvent, date: Date, hour: number) => {
@@ -235,57 +222,6 @@ export function Calendar() {
     setNewScheduleId(null);
   };
 
-  // Handle dropping a schedule into a new time slot
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    setActiveId(null);
-
-    // NOTE: Critical for drop detection
-    // 'over' contains the droppable element we're hovering over
-    // If we're not over a valid drop target, cancel the operation
-    if (!over?.id || typeof over.id !== 'string') return;
-
-    // NOTE: Critical for position calculation
-    // Parse the drop target ID to get date and time
-    // Format: "timestamp-hour-minute" (e.g., "1673827200000-9-30" for 9:30 on some date)
-    const [dateStr, hour, minute] = over.id.split('-');
-    const date = new Date(Number(dateStr));
-
-    if (!date || isNaN(Number(hour))) return;
-
-    // Find the schedule being dragged
-    const schedule = schedules.find((s) => s.id === active.id);
-    if (!schedule) return;
-
-    // NOTE: Critical for maintaining schedule duration
-    // Calculate duration in minutes to preserve it when dropping
-    // This ensures a 1-hour meeting stays 1-hour even when moved
-    const duration =
-      (schedule.endTime.getTime() - schedule.startTime.getTime()) / 1000 / 60;
-
-    // NOTE: Critical for drop position calculation
-    // Calculate new start and end times based on drop target
-    // 1. Create new date object from the target day
-    // 2. Set hours and minutes from the drop target
-    // 3. Calculate end time by adding original duration
-    const newStartTime = new Date(date);
-    newStartTime.setHours(Number(hour), Number(minute) || 0, 0, 0);
-    const newEndTime = addMinutes(newStartTime, duration);
-
-    // Update the schedule's times while maintaining duration
-    setSchedules((prev) =>
-      prev.map((s) =>
-        s.id === active.id
-          ? {
-              ...s,
-              startTime: newStartTime,
-              endTime: newEndTime,
-            }
-          : s,
-      ),
-    );
-  };
-
   // Generate array of days for the current week
   const weekDays = useMemo(
     () =>
@@ -333,6 +269,40 @@ export function Calendar() {
       // TODO: Queue deletion for API call
     };
 
+    // Listen for inbox item drops
+    const handleInboxItemDropped = (event: CustomEvent) => {
+      const { id, date, hour, minute, data } = event.detail;
+
+      // Create start and end times
+      const startTime = new Date(date);
+      startTime.setHours(hour, minute, 0, 0);
+
+      const endTime = new Date(startTime);
+      endTime.setMinutes(startTime.getMinutes() + (data.duration || 30));
+
+      // Create new schedule from inbox item
+      const newSchedule: Schedule = {
+        id: id as string,
+        title: data.title,
+        description: data.description,
+        startTime,
+        endTime,
+        location: data.location,
+        meetingLink: data.meetingLink,
+        status: ScheduleStatus.SCHEDULED,
+      };
+
+      // Add to schedules state
+      setSchedules((prev) => [...prev, newSchedule]);
+
+      // Emit event to remove from inbox
+      const scheduledEvent = new CustomEvent('inboxItemScheduled', {
+        detail: { id },
+        bubbles: true,
+      });
+      document.dispatchEvent(scheduledEvent);
+    };
+
     document.addEventListener(
       'scheduleUpdate',
       handleScheduleUpdate as EventListener,
@@ -340,6 +310,10 @@ export function Calendar() {
     document.addEventListener(
       'scheduleDelete',
       handleScheduleDelete as EventListener,
+    );
+    document.addEventListener(
+      'inboxItemDropped',
+      handleInboxItemDropped as EventListener,
     );
 
     return () => {
@@ -351,130 +325,103 @@ export function Calendar() {
         'scheduleDelete',
         handleScheduleDelete as EventListener,
       );
+      document.removeEventListener(
+        'inboxItemDropped',
+        handleInboxItemDropped as EventListener,
+      );
     };
   }, []);
 
   return (
-    <DndContext
-      sensors={sensors}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-      // NOTE: Critical for drop target detection
-      // closestCenter determines which droppable element we're hovering over
-      // It finds the closest droppable center point to the dragged item's center
-      collisionDetection={closestCenter}
-    >
-      <div className="relative flex h-full flex-col overflow-hidden">
-        {/* Calendar Header */}
-        <div className="grid grid-cols-[3rem_1fr] pr-4">
-          {/* Time gutter */}
-          <div className="w-12" />
-          {/* Day columns */}
-          <div className="grid grid-cols-7">
-            {weekDays.map(({ dayName, dayNumber, isToday }, index) => (
+    <div className="relative flex h-full flex-col overflow-hidden">
+      {/* Calendar Header */}
+      <div className="grid grid-cols-[3rem_1fr] pr-4">
+        {/* Time gutter */}
+        <div className="w-12" />
+        {/* Day columns */}
+        <div className="grid grid-cols-7">
+          {weekDays.map(({ dayName, dayNumber, isToday }, index) => (
+            <div
+              key={dayNumber}
+              className={`flex flex-col items-center justify-center p-2 ${
+                isToday ? 'bg-primary/5' : ''
+              } ${index === 0 ? 'rounded-tl-lg' : ''} ${
+                index === weekDays.length - 1 ? 'rounded-tr-lg' : ''
+              }`}
+            >
+              <div className="text-sm font-medium">{dayName}</div>
               <div
-                key={dayNumber}
-                className={`flex flex-col items-center justify-center p-2 ${
-                  isToday ? 'bg-primary/5' : ''
-                } ${index === 0 ? 'rounded-tl-lg' : ''} ${
-                  index === weekDays.length - 1 ? 'rounded-tr-lg' : ''
+                className={`text-xl ${
+                  isToday ? 'text-primary' : 'text-muted-foreground'
                 }`}
               >
-                <div className="text-sm font-medium">{dayName}</div>
-                <div
-                  className={`text-xl ${
-                    isToday ? 'text-primary' : 'text-muted-foreground'
-                  }`}
-                >
-                  {dayNumber}
-                </div>
+                {dayNumber}
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Calendar Body */}
+      <div className="relative flex flex-1 overflow-auto pt-4">
+        {/* Time Labels */}
+        <div className="sticky left-0 z-30 w-12 bg-background">
+          {timeSlots.map(({ hour, label }) => (
+            <div
+              key={hour}
+              className="relative h-10 text-xs text-muted-foreground"
+            >
+              <span className="absolute -top-2.5 right-4">{label}</span>
+            </div>
+          ))}
         </div>
 
-        {/* Calendar Body */}
-        <div className="relative flex flex-1 overflow-auto pt-4">
-          {/* Time Labels */}
-          <div className="sticky left-0 z-30 w-12 bg-background">
-            {timeSlots.map(({ hour, label }) => (
+        {/* Time Grid */}
+        <div className="relative flex flex-1">
+          <div className="grid flex-1 grid-cols-7 divide-x divide-border">
+            {weekDays.map((day) => (
               <div
-                key={hour}
-                className="relative h-10 text-xs text-muted-foreground"
+                key={day.date.toISOString()}
+                className="relative"
+                style={{ minHeight: 'fit-content' }}
               >
-                <span className="absolute -top-2.5 right-4">{label}</span>
+                {/* Add CurrentTimeIndicator only for today's column */}
+                {day.isToday && <CurrentTimeIndicator />}
+
+                {/* Time Slots */}
+                {timeSlots.map((slot) => (
+                  <div
+                    key={slot.hour}
+                    className="border-border"
+                  >
+                    {/* Upper half (XX:00) */}
+                    <TimeSlot
+                      id={`${day.date.getTime()}-${slot.hour}-0`}
+                      onClick={(e) => handleCellClick(e, day.date, slot.hour)}
+                      isHalfHour={false}
+                    />
+                    {/* Lower half (XX:30) */}
+                    <TimeSlot
+                      id={`${day.date.getTime()}-${slot.hour}-30`}
+                      onClick={(e) => handleCellClick(e, day.date, slot.hour)}
+                      isHalfHour={true}
+                    />
+                  </div>
+                ))}
+
+                {/* Render schedules for this day */}
+                {schedules
+                  .filter((schedule) => isSameDay(schedule.startTime, day.date))
+                  .map((schedule) => (
+                    <ScheduleCell
+                      key={schedule.id}
+                      {...schedule}
+                    />
+                  ))}
               </div>
             ))}
           </div>
-
-          {/* Time Grid */}
-          <div className="relative flex flex-1">
-            <div className="grid flex-1 grid-cols-7 divide-x divide-border">
-              {weekDays.map((day) => (
-                <div
-                  key={day.date.toISOString()}
-                  className="relative"
-                  style={{ minHeight: 'fit-content' }}
-                >
-                  {/* Add CurrentTimeIndicator only for today's column */}
-                  {day.isToday && <CurrentTimeIndicator />}
-
-                  {/* Time Slots */}
-                  {timeSlots.map((slot) => (
-                    <div
-                      key={slot.hour}
-                      className="border-border"
-                    >
-                      {/* Upper half (XX:00) */}
-                      <TimeSlot
-                        id={`${day.date.getTime()}-${slot.hour}-0`}
-                        onClick={(e) => handleCellClick(e, day.date, slot.hour)}
-                        isHalfHour={false}
-                      />
-                      {/* Lower half (XX:30) */}
-                      <TimeSlot
-                        id={`${day.date.getTime()}-${slot.hour}-30`}
-                        onClick={(e) => handleCellClick(e, day.date, slot.hour)}
-                        isHalfHour={true}
-                      />
-                    </div>
-                  ))}
-
-                  {/* Render schedules for this day */}
-                  {schedules
-                    .filter((schedule) =>
-                      isSameDay(schedule.startTime, day.date),
-                    )
-                    .map((schedule) =>
-                      schedule.id !== activeId ? (
-                        <ScheduleCell
-                          key={schedule.id}
-                          {...schedule}
-                        />
-                      ) : null,
-                    )}
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
-
-        {/* Drag Overlay */}
-        <DragOverlay
-          dropAnimation={{
-            duration: 150,
-            easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
-          }}
-        >
-          {activeId && (
-            <div className="w-[200px]">
-              <ScheduleCell
-                {...schedules.find((s) => s.id === activeId)!}
-                isDragging
-              />
-            </div>
-          )}
-        </DragOverlay>
       </div>
 
       {/* New Schedule Popover */}
@@ -515,6 +462,6 @@ export function Calendar() {
           </div>
         </PopoverContent>
       </Popover>
-    </DndContext>
+    </div>
   );
 }

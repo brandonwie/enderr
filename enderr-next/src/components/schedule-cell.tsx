@@ -3,7 +3,6 @@
 import { useState } from 'react';
 
 import { useDraggable } from '@dnd-kit/core';
-import { CSS } from '@dnd-kit/utilities';
 import { ScheduleStatus } from '@shared/types/schedule';
 import { format } from 'date-fns';
 
@@ -13,61 +12,66 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import { useToast } from '@/hooks/use-toast';
 
 interface ScheduleCellProps {
   id: string;
-  startTime: Date;
-  endTime: Date;
   title: string;
   description?: string;
+  startTime: Date;
+  endTime: Date;
   location?: string;
   meetingLink?: string;
-  /** Current status of the schedule */
   status: ScheduleStatus;
-  isDragging?: boolean;
+  isDragOverlay?: boolean;
 }
 
+/**
+ * ScheduleCell Component
+ * @remarks
+ * Represents a schedule item in the calendar grid
+ * - Positioned absolutely based on start/end times
+ * - Draggable for rescheduling
+ * - Shows title and time range
+ * - Supports editing via popover
+ */
 export function ScheduleCell({
   id,
-  startTime,
-  endTime,
   title,
   description,
+  startTime,
+  endTime,
   location,
   meetingLink,
-  status = ScheduleStatus.SCHEDULED,
-  isDragging,
+  status,
+  isDragOverlay,
 }: ScheduleCellProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const { toast } = useToast();
 
-  // Set up draggable functionality
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    isDragging: isDraggingNow,
-  } = useDraggable({
-    id,
-  });
-
-  // Calculate position and size
+  // Calculate position and height
   const startMinutes = startTime.getHours() * 60 + startTime.getMinutes();
   const endMinutes = endTime.getHours() * 60 + endTime.getMinutes();
   const duration = endMinutes - startMinutes;
-  const top = (startMinutes / 30) * 20;
 
-  // Style based on drag state
-  const style = isDragging
-    ? {
-        height: `${(duration / 30) * 20}px`,
-        width: '200px',
-      }
-    : {
-        top: `${top}px`,
-        height: `${(duration / 30) * 20}px`,
-        transform: CSS.Transform.toString(transform),
-      };
+  const top = (startMinutes / 30) * 20; // 20px per 30min slot
+  const height = (duration / 30) * 20;
+
+  // Make this element draggable
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id,
+    data: {
+      type: 'schedule',
+      id,
+      title,
+      description,
+      startTime,
+      endTime,
+      location,
+      meetingLink,
+      status,
+    },
+  });
 
   const handleSubmit = async (data: ScheduleFormValues) => {
     try {
@@ -81,20 +85,7 @@ export function ScheduleCell({
       const newEndTime = new Date(data.date);
       newEndTime.setHours(endHours, endMinutes, 0);
 
-      // Validate time range
-      if (newEndTime <= newStartTime) {
-        throw new Error('End time must be after start time');
-      }
-
-      // TODO: API integration
-      // const response = await updateSchedule({
-      //   id,
-      //   ...data,
-      //   startTime: newStartTime,
-      //   endTime: newEndTime
-      // });
-
-      // For now, emit an event that the parent can listen to
+      // Emit event to update schedule
       const event = new CustomEvent('scheduleUpdate', {
         detail: {
           id,
@@ -109,20 +100,20 @@ export function ScheduleCell({
       setIsOpen(false);
     } catch (error) {
       console.error('Failed to update schedule:', error);
-      // TODO: Show error toast when we add toast notifications
+      toast({
+        variant: 'destructive',
+        title: 'Update Failed',
+        description: 'Failed to update schedule. Please try again.',
+      });
     }
   };
 
   const handleDelete = async () => {
     try {
-      // TODO: API integration
-      // const response = await deleteSchedule(id);
-
-      // For now, emit a delete event that the parent can listen to
+      // Emit event to delete schedule
       const event = new CustomEvent('scheduleDelete', {
         detail: {
           id,
-          // Include all schedule data for potential undo functionality
           schedule: {
             title,
             description,
@@ -130,6 +121,7 @@ export function ScheduleCell({
             endTime,
             location,
             meetingLink,
+            status,
           },
         },
         bubbles: true,
@@ -139,9 +131,41 @@ export function ScheduleCell({
       setIsOpen(false);
     } catch (error) {
       console.error('Failed to delete schedule:', error);
-      // TODO: Show error toast when we add toast notifications
+      toast({
+        variant: 'destructive',
+        title: 'Delete Failed',
+        description: 'Failed to delete schedule. Please try again.',
+      });
     }
   };
+
+  // Don't show popover in drag overlay
+  if (isDragOverlay) {
+    return (
+      <div
+        className="rounded bg-primary p-1 text-xs text-primary-foreground"
+        style={{
+          height: `${height}px`,
+          transform: 'translate(-50%, -50%)',
+        }}
+      >
+        <div className="font-medium">{title}</div>
+        <div className="text-[10px] opacity-90">
+          {startTime.toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+          })}
+          {' - '}
+          {endTime.toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <Popover
@@ -153,36 +177,34 @@ export function ScheduleCell({
           ref={setNodeRef}
           {...attributes}
           {...listeners}
-          data-draggable-id={id}
-          className={`group absolute left-0 right-0 flex cursor-move flex-col rounded p-2 ${
-            isDragging || isDraggingNow
-              ? 'z-50 bg-primary/20 shadow-lg'
-              : 'bg-primary/10 hover:bg-primary/20'
+          className={`absolute left-0 right-0 z-20 m-px rounded bg-primary p-1 text-xs text-primary-foreground transition-opacity hover:cursor-grab active:cursor-grabbing ${
+            isDragging ? 'opacity-50' : ''
           }`}
-          style={style}
+          style={{
+            top: `${top}px`,
+            height: `${height}px`,
+          }}
         >
-          {/* Schedule Content */}
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex-1 overflow-hidden">
-              <h3 className="truncate text-sm font-medium">{title}</h3>
-              <p className="text-xs text-muted-foreground">
-                {format(startTime, 'HH:mm')} - {format(endTime, 'HH:mm')}
-              </p>
-            </div>
+          <div className="font-medium">{title}</div>
+          <div className="text-[10px] opacity-90">
+            {startTime.toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+            })}
+            {' - '}
+            {endTime.toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+            })}
           </div>
-
-          {/* Optional Location/Link Display */}
-          {(location || meetingLink) && (
-            <p className="mt-1 truncate text-xs text-muted-foreground">
-              {location || meetingLink}
-            </p>
-          )}
         </div>
       </PopoverTrigger>
 
       <PopoverContent
         side="right"
-        align="center"
+        align="start"
         className="w-80"
       >
         <div className="max-h-[calc(100vh-4rem)] overflow-y-auto">
@@ -196,7 +218,6 @@ export function ScheduleCell({
               endTime: format(endTime, 'HH:mm'),
               location,
               meetingLink,
-              participants: '',
               status,
             }}
             onSubmit={handleSubmit}

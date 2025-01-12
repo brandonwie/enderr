@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 
 import { Header } from '@/components/header';
+import { Toaster } from '@/components/ui/toaster';
 import { RootProvider } from '@/providers/root-provider';
 
 import './globals.css';
@@ -10,7 +11,7 @@ const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: 'Enderr',
-  description: 'Simple calendar application',
+  description: 'Calendar app with concurrent editing',
 };
 
 /**
@@ -31,6 +32,7 @@ export default function RootLayout({
         <RootProvider>
           <Header />
           {children}
+          <Toaster />
         </RootProvider>
       </body>
     </html>
