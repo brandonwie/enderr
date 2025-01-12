@@ -1,14 +1,33 @@
 'use client';
 
 import { useTheme } from 'next-themes';
-import { useRouter } from 'next/navigation';
 
 import { LogOut, Moon, Sun } from 'lucide-react';
-import { useRecoilValue, useSetRecoilState } from 'recoil';
 
 import { Button } from '@/components/ui/button';
-import { apiClient, API_ENDPOINTS } from '@/lib/api-client';
-import { currentUserSelector, accessTokenAtom } from '@/stores/auth';
+import { useAuth } from '@/contexts/auth-context';
+
+/**
+ * AuthenticatedActions component
+ * @remarks Contains actions that require authentication (sign out button)
+ */
+function AuthenticatedActions() {
+  const { user, signOut } = useAuth();
+
+  if (!user) return null;
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={signOut}
+      title="Sign out"
+    >
+      <LogOut className="h-5 w-5" />
+      <span className="sr-only">Sign out</span>
+    </Button>
+  );
+}
 
 /**
  * Header component
@@ -16,37 +35,13 @@ import { currentUserSelector, accessTokenAtom } from '@/stores/auth';
  */
 export function Header() {
   const { theme, setTheme } = useTheme();
-  const router = useRouter();
-  const user = useRecoilValue(currentUserSelector);
-  const setAccessToken = useSetRecoilState(accessTokenAtom);
-
-  const handleSignOut = async () => {
-    try {
-      await apiClient.post(API_ENDPOINTS.auth.signOut());
-      // Clear access token which will update currentUserSelector
-      setAccessToken(null);
-      router.push('/signin');
-    } catch (error) {
-      console.error('Sign out failed:', error);
-    }
-  };
 
   return (
     <header className="sticky top-0 z-10 w-full border-b bg-background/95 px-16 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="flex h-14 items-center justify-between">
         <div className="font-bold">Enderr</div>
         <div className="flex items-center gap-2">
-          {user && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleSignOut}
-              title="Sign out"
-            >
-              <LogOut className="h-5 w-5" />
-              <span className="sr-only">Sign out</span>
-            </Button>
-          )}
+          <AuthenticatedActions />
           <Button
             variant="ghost"
             size="icon"

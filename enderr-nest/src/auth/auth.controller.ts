@@ -18,12 +18,6 @@ import { User } from './decorators/user.decorator';
 import { UserFromJwt } from './types/user';
 import { PrismaService } from '../prisma.service';
 
-class GoogleSignInDto {
-  @IsString()
-  @IsNotEmpty()
-  google_token: string;
-}
-
 /**
  * DTO for Google Identity Services credential
  * @remarks The credential property is the JWT token from Google
@@ -83,32 +77,6 @@ export class AuthController {
       return { success: true };
     } catch (error) {
       this.logger.error('Google callback failed', error.stack);
-      throw new UnauthorizedException('Authentication failed');
-    }
-  }
-
-  /**
-   * Sign in with Google OAuth token
-   * @param dto Contains Google OAuth token from client
-   * @param res Express response object for setting cookies
-   */
-  @Post('signin')
-  async signInWithGoogle(
-    @Body() dto: GoogleSignInDto,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<{ success: boolean }> {
-    try {
-      if (!dto.google_token) {
-        this.logger.warn('Sign in attempt without token');
-        throw new UnauthorizedException('Token is required');
-      }
-
-      const tokens = await this.authService.signInWithGoogle(dto.google_token);
-      this.setAuthCookies(res, tokens);
-
-      return { success: true };
-    } catch (error) {
-      this.logger.error('Sign in failed', error.stack);
       throw new UnauthorizedException('Authentication failed');
     }
   }
