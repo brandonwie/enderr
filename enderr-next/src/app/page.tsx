@@ -5,12 +5,13 @@ import { useState } from 'react';
 import {
   DndContext,
   DragEndEvent,
+  DragOverEvent,
   DragOverlay,
   DragStartEvent,
   PointerSensor,
   useSensor,
   useSensors,
-  closestCenter,
+  pointerWithin,
 } from '@dnd-kit/core';
 import { DragItemType, ScheduleStatus } from '@shared/types/schedule';
 
@@ -18,6 +19,13 @@ import { Calendar } from '@/components/calendar';
 import { InboxSchedule } from '@/components/inbox-schedule';
 import { ScheduleCell } from '@/components/schedule-cell';
 import { Sidebar } from '@/components/sidebar';
+import {
+  dispatchInboxItemDropped,
+  dispatchInboxReorder,
+  dispatchScheduleDelete,
+  dispatchScheduleToInbox,
+  dispatchScheduleUpdate,
+} from '@/lib/user-event';
 
 /**
  * Interface for drag and drop data
@@ -63,6 +71,19 @@ export default function Home() {
     setActiveDragData(event.active.data.current as DragData);
   };
 
+  // Handle drag over for sorting
+  const handleDragOver = (event: DragOverEvent) => {
+    const { active, over } = event;
+
+    if (
+      over &&
+      active.data.current?.type === DragItemType.INBOX &&
+      over.data.current?.type === DragItemType.INBOX
+    ) {
+      dispatchInboxReorder(active.id as string, over.id as string);
+    }
+  };
+
   // Handle drag end and item drops
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -74,27 +95,28 @@ export default function Home() {
       return;
     }
 
+    // Handle inbox item reordering
+    if (
+      active.data.current?.type === DragItemType.INBOX &&
+      over.data.current?.type === DragItemType.INBOX
+    ) {
+      dispatchInboxReorder(active.id as string, over.id as string);
+      setActiveId(null);
+      setActiveDragData(null);
+      return;
+    }
+
     // Handle dropping into inbox area
     if (over.id === 'inbox' && activeDragData?.type === DragItemType.SCHEDULE) {
       // First, convert schedule to inbox item
-      const scheduleToInboxEvent = new CustomEvent('scheduleToInbox', {
-        detail: {
-          id: active.id,
-          title: activeDragData.title,
-          description: activeDragData.description,
-        },
-        bubbles: true,
-      });
-      document.dispatchEvent(scheduleToInboxEvent);
+      dispatchScheduleToInbox(
+        active.id as string,
+        activeDragData.title,
+        activeDragData.description,
+      );
 
       // Then, delete the schedule from calendar
-      const deleteEvent = new CustomEvent('scheduleDelete', {
-        detail: {
-          id: active.id,
-        },
-        bubbles: true,
-      });
-      document.dispatchEvent(deleteEvent);
+      dispatchScheduleDelete(active.id as string);
 
       setActiveId(null);
       setActiveDragData(null);
@@ -114,22 +136,18 @@ export default function Home() {
 
     // Emit event for calendar to handle the drop
     if (activeDragData?.type === DragItemType.INBOX) {
-      const dropEvent = new CustomEvent('inboxItemDropped', {
-        detail: {
-          id: active.id,
-          date,
-          hour: Number(hour),
-          minute: Number(minute) || 0,
-          data: {
-            type: DragItemType.INBOX,
-            title: activeDragData.title,
-            description: activeDragData.description,
-            duration: activeDragData.duration || 30,
-          },
+      dispatchInboxItemDropped(
+        active.id as string,
+        date,
+        Number(hour),
+        Number(minute) || 0,
+        {
+          type: 'inbox',
+          title: activeDragData.title,
+          description: activeDragData.description,
+          duration: activeDragData.duration || 30,
         },
-        bubbles: true,
-      });
-      document.dispatchEvent(dropEvent);
+      );
     } else if (
       activeDragData?.type === DragItemType.SCHEDULE &&
       activeDragData.startTime &&
@@ -148,18 +166,14 @@ export default function Home() {
       endTime.setMinutes(startTime.getMinutes() + duration);
 
       // Emit event to update schedule
-      const updateEvent = new CustomEvent('scheduleUpdate', {
-        detail: {
-          id: active.id,
-          title: activeDragData.title,
-          description: activeDragData.description,
-          startTime,
-          endTime,
-          status: activeDragData.status,
-        },
-        bubbles: true,
-      });
-      document.dispatchEvent(updateEvent);
+      dispatchScheduleUpdate(
+        active.id as string,
+        activeDragData.title,
+        activeDragData.description,
+        startTime,
+        endTime,
+        activeDragData.status || ScheduleStatus.SCHEDULED,
+      );
     }
 
     setActiveId(null);
@@ -170,8 +184,9 @@ export default function Home() {
     <DndContext
       sensors={sensors}
       onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
-      collisionDetection={closestCenter}
+      collisionDetection={pointerWithin}
     >
       <main className="grid h-[calc(100vh-3.5rem)] grid-cols-[256px_1fr]">
         <Sidebar />

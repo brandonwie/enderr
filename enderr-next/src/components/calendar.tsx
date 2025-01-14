@@ -13,6 +13,15 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import {
+  InboxItemDroppedEvent,
+  ScheduleDeleteEvent,
+  ScheduleUpdateEvent,
+  addInboxItemDroppedListener,
+  addScheduleDeleteListener,
+  addScheduleUpdateListener,
+  dispatchInboxItemScheduled,
+} from '@/lib/user-event';
 
 // Base schedule type without ID
 interface NewSchedule {
@@ -219,8 +228,8 @@ export function Calendar() {
 
   // Listen for events
   useEffect(() => {
-    const handleInboxItemDropped = (event: CustomEvent) => {
-      const { id, date, hour, minute, data } = event.detail;
+    const handleInboxItemDropped = ({ detail }: InboxItemDroppedEvent) => {
+      const { id, date, hour, minute, data } = detail;
 
       // Create new schedule from inbox item
       const startTime = new Date(date);
@@ -241,16 +250,11 @@ export function Calendar() {
       setSchedules((prev) => [...prev, newSchedule]);
 
       // Notify inbox that item has been scheduled
-      const scheduledEvent = new CustomEvent('inboxItemScheduled', {
-        detail: { id },
-        bubbles: true,
-      });
-      document.dispatchEvent(scheduledEvent);
+      dispatchInboxItemScheduled(id);
     };
 
-    const handleScheduleUpdate = (event: CustomEvent) => {
-      const { id, title, description, startTime, endTime, status } =
-        event.detail;
+    const handleScheduleUpdate = ({ detail }: ScheduleUpdateEvent) => {
+      const { id, title, description, startTime, endTime, status } = detail;
 
       setSchedules((prev) =>
         prev.map((schedule) =>
@@ -268,37 +272,25 @@ export function Calendar() {
       );
     };
 
-    const handleScheduleDelete = (event: CustomEvent) => {
-      const { id } = event.detail;
+    const handleScheduleDelete = ({ detail }: ScheduleDeleteEvent) => {
+      const { id } = detail;
       setSchedules((prev) => prev.filter((schedule) => schedule.id !== id));
     };
 
-    document.addEventListener(
-      'inboxItemDropped',
-      handleInboxItemDropped as EventListener,
+    // Add event listeners
+    const removeInboxItemDroppedListener = addInboxItemDroppedListener(
+      handleInboxItemDropped,
     );
-    document.addEventListener(
-      'scheduleUpdate',
-      handleScheduleUpdate as EventListener,
-    );
-    document.addEventListener(
-      'scheduleDelete',
-      handleScheduleDelete as EventListener,
-    );
+    const removeScheduleUpdateListener =
+      addScheduleUpdateListener(handleScheduleUpdate);
+    const removeScheduleDeleteListener =
+      addScheduleDeleteListener(handleScheduleDelete);
 
+    // Clean up event listeners
     return () => {
-      document.removeEventListener(
-        'inboxItemDropped',
-        handleInboxItemDropped as EventListener,
-      );
-      document.removeEventListener(
-        'scheduleUpdate',
-        handleScheduleUpdate as EventListener,
-      );
-      document.removeEventListener(
-        'scheduleDelete',
-        handleScheduleDelete as EventListener,
-      );
+      removeInboxItemDroppedListener();
+      removeScheduleUpdateListener();
+      removeScheduleDeleteListener();
     };
   }, []);
 

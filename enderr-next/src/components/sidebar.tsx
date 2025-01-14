@@ -3,6 +3,10 @@
 import { useState, useEffect } from 'react';
 
 import { useDroppable } from '@dnd-kit/core';
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 import { DragItemType, ScheduleStatus } from '@shared/types/schedule';
 
 import { InboxForm, type InboxFormValues } from '@/components/inbox-form';
@@ -16,6 +20,14 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  addInboxItemScheduledListener,
+  addInboxReorderListener,
+  addScheduleToInboxListener,
+  InboxItemScheduledEvent,
+  InboxReorderEvent,
+  ScheduleToInboxEvent,
+} from '@/lib/user-event';
 
 /**
  * Represents an item in the inbox
@@ -38,6 +50,7 @@ interface InboxItem {
  * - Button to create new inbox items
  * - Scrollable list of inbox items
  * - Droppable area for returning items to inbox
+ * - Sortable inbox items
  */
 export function Sidebar() {
   const [open, setOpen] = useState(false);
@@ -67,16 +80,15 @@ export function Sidebar() {
     },
   });
 
-  // Listen for inbox item scheduled event
+  // Listen for events
   useEffect(() => {
-    const handleInboxItemScheduled = (event: CustomEvent) => {
-      const { id } = event.detail;
+    const handleInboxItemScheduled = ({ detail }: InboxItemScheduledEvent) => {
+      const { id } = detail;
       setInboxItems((prevItems) => prevItems.filter((item) => item.id !== id));
     };
 
-    // Listen for schedule items being moved to inbox
-    const handleScheduleToInbox = (event: CustomEvent) => {
-      const { id, title, description } = event.detail;
+    const handleScheduleToInbox = ({ detail }: ScheduleToInboxEvent) => {
+      const { id, title, description } = detail;
       const newInboxItem: InboxItem = {
         id,
         title,
@@ -87,24 +99,36 @@ export function Sidebar() {
       setInboxItems((prev) => [...prev, newInboxItem]);
     };
 
-    document.addEventListener(
-      'inboxItemScheduled',
-      handleInboxItemScheduled as EventListener,
-    );
-    document.addEventListener(
-      'scheduleToInbox',
-      handleScheduleToInbox as EventListener,
-    );
+    const handleInboxReorder = ({ detail }: InboxReorderEvent) => {
+      const { activeId, overId } = detail;
 
+      setInboxItems((items) => {
+        const oldIndex = items.findIndex((item) => item.id === activeId);
+        const newIndex = items.findIndex((item) => item.id === overId);
+
+        const newItems = [...items];
+        const [movedItem] = newItems.splice(oldIndex, 1);
+        newItems.splice(newIndex, 0, movedItem);
+
+        return newItems;
+      });
+    };
+
+    // Add event listeners
+    const removeInboxItemScheduledListener = addInboxItemScheduledListener(
+      handleInboxItemScheduled,
+    );
+    const removeScheduleToInboxListener = addScheduleToInboxListener(
+      handleScheduleToInbox,
+    );
+    const removeInboxReorderListener =
+      addInboxReorderListener(handleInboxReorder);
+
+    // Clean up event listeners
     return () => {
-      document.removeEventListener(
-        'inboxItemScheduled',
-        handleInboxItemScheduled as EventListener,
-      );
-      document.removeEventListener(
-        'scheduleToInbox',
-        handleScheduleToInbox as EventListener,
-      );
+      removeInboxItemScheduledListener();
+      removeScheduleToInboxListener();
+      removeInboxReorderListener();
     };
   }, []);
 
@@ -151,14 +175,19 @@ export function Sidebar() {
       </div>
 
       <ScrollArea className="flex-1">
-        <div className="space-y-2 pr-4">
-          {inboxItems.map((item) => (
-            <InboxSchedule
-              key={item.id}
-              {...item}
-            />
-          ))}
-        </div>
+        <SortableContext
+          items={inboxItems.map((item) => item.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          <div className="space-y-2 pr-4">
+            {inboxItems.map((item) => (
+              <InboxSchedule
+                key={item.id}
+                {...item}
+              />
+            ))}
+          </div>
+        </SortableContext>
       </ScrollArea>
     </aside>
   );
