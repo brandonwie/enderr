@@ -75,23 +75,11 @@ export function ScheduleCell({
 
   const handleSubmit = async (data: ScheduleFormValues) => {
     try {
-      // Combine date and time to create new Date objects
-      const [hours, minutes] = data.startTime.split(':').map(Number);
-      const [endHours, endMinutes] = data.endTime.split(':').map(Number);
-
-      const newStartTime = new Date(data.date);
-      newStartTime.setHours(hours, minutes, 0);
-
-      const newEndTime = new Date(data.date);
-      newEndTime.setHours(endHours, endMinutes, 0);
-
       // Emit event to update schedule
       const event = new CustomEvent('scheduleUpdate', {
         detail: {
           id,
           ...data,
-          startTime: newStartTime,
-          endTime: newEndTime,
         },
         bubbles: true,
       });
@@ -213,11 +201,8 @@ export function ScheduleCell({
             defaultValues={{
               title,
               description,
-              date: startTime,
-              startTime: format(startTime, 'HH:mm'),
-              endTime: format(endTime, 'HH:mm'),
-              location,
-              meetingLink,
+              startTime,
+              endTime,
               status,
             }}
             onSubmit={handleSubmit}

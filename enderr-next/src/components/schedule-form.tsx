@@ -18,21 +18,26 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 // Base schema that both create and edit will use
 const baseScheduleSchema = {
+  /** Title of the schedule */
   title: z.string().min(1, 'Title is required'),
+  /** Optional description */
   description: z.string().optional(),
-  date: z.date(),
-  startTime: z
-    .string()
-    .regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Invalid time format'),
-  endTime: z
-    .string()
-    .regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Invalid time format'),
-  location: z.string().optional(),
-  meetingLink: z.string().url().optional().or(z.literal('')),
-  participants: z.string().optional(),
+  /** Start time of the schedule */
+  startTime: z.date(),
+  /** End time of the schedule */
+  endTime: z.date(),
+  /** Duration in minutes (only used in INBOX status) */
+  duration: z.number().min(1),
   /** Status of the schedule */
   status: z.nativeEnum(ScheduleStatus),
 };
@@ -40,15 +45,15 @@ const baseScheduleSchema = {
 // Schema for creating new schedule (only time fields required initially)
 export const createScheduleSchema = z.object(baseScheduleSchema).refine(
   (data) => {
-    const [startHours, startMinutes] = data.startTime.split(':').map(Number);
-    const [endHours, endMinutes] = data.endTime.split(':').map(Number);
-    const startTotal = startHours * 60 + startMinutes;
-    const endTotal = endHours * 60 + endMinutes;
-    return endTotal > startTotal;
+    // If not in INBOX status, require start and end time
+    if (data.status !== ScheduleStatus.INBOX) {
+      return data.startTime < data.endTime;
+    }
+    return true;
   },
   {
     message: 'End time must be after start time',
-    path: ['endTime'], // Show error on the end time field
+    path: ['endTime'],
   },
 );
 
@@ -56,19 +61,27 @@ export const createScheduleSchema = z.object(baseScheduleSchema).refine(
 export const editScheduleSchema = z
   .object({
     ...baseScheduleSchema,
-    title: z.string().min(1, 'Title is required'),
+    /** Participants in the schedule */
+    participants: z.array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        email: z.string().email(),
+        picture: z.string().optional(),
+      }),
+    ),
   })
   .refine(
     (data) => {
-      const [startHours, startMinutes] = data.startTime.split(':').map(Number);
-      const [endHours, endMinutes] = data.endTime.split(':').map(Number);
-      const startTotal = startHours * 60 + startMinutes;
-      const endTotal = endHours * 60 + endMinutes;
-      return endTotal > startTotal;
+      // If not in INBOX status, require start and end time
+      if (data.status !== ScheduleStatus.INBOX) {
+        return data.startTime < data.endTime;
+      }
+      return true;
     },
     {
       message: 'End time must be after start time',
-      path: ['endTime'], // Show error on the end time field
+      path: ['endTime'],
     },
   );
 
@@ -155,147 +168,128 @@ export function ScheduleForm({
           )}
         />
 
-        <FormField
-          control={form.control}
-          name="date"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Date</FormLabel>
-              <FormControl>
-                <Calendar
-                  mode="single"
-                  selected={field.value}
-                  onSelect={field.onChange}
-                  disabled={(date) => date < new Date('1900-01-01')}
-                  initialFocus
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <div className="flex gap-2">
+        {mode === 'create' && (
           <FormField
             control={form.control}
-            name="startTime"
+            name="duration"
             render={({ field }) => (
-              <FormItem className="flex-1">
-                <FormLabel>Start Time</FormLabel>
+              <FormItem>
+                <FormLabel>Duration (minutes)</FormLabel>
                 <FormControl>
                   <Input
                     {...field}
-                    placeholder="HH:mm"
+                    type="number"
+                    min={1}
+                    onChange={(e) =>
+                      field.onChange(parseInt(e.target.value, 10))
+                    }
                   />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
+        )}
 
-          <FormField
-            control={form.control}
-            name="endTime"
-            render={({ field }) => (
-              <FormItem className="flex-1">
-                <FormLabel>End Time</FormLabel>
-                <FormControl>
-                  <Input
-                    {...field}
-                    placeholder="HH:mm"
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
+        {mode === 'edit' && (
+          <>
+            <div className="flex gap-2">
+              <FormField
+                control={form.control}
+                name="startTime"
+                render={({ field }) => (
+                  <FormItem className="flex-1">
+                    <FormLabel>Start Time</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        type="datetime-local"
+                        value={field.value?.toISOString().slice(0, 16)}
+                        onChange={(e) => {
+                          field.onChange(new Date(e.target.value));
+                        }}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-        <FormField
-          control={form.control}
-          name="location"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Location</FormLabel>
-              <FormControl>
-                <Input {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
+              <FormField
+                control={form.control}
+                name="endTime"
+                render={({ field }) => (
+                  <FormItem className="flex-1">
+                    <FormLabel>End Time</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        type="datetime-local"
+                        value={field.value?.toISOString().slice(0, 16)}
+                        onChange={(e) => {
+                          field.onChange(new Date(e.target.value));
+                        }}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <FormField
+              control={form.control}
+              name="status"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Status</FormLabel>
+                  <Select
+                    onValueChange={(value) =>
+                      field.onChange(value as ScheduleStatus)
+                    }
+                    defaultValue={field.value}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value={ScheduleStatus.SCHEDULED}>
+                        Scheduled
+                      </SelectItem>
+                      <SelectItem value={ScheduleStatus.COMPLETED}>
+                        Completed
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </>
+        )}
+
+        <div className="flex justify-end gap-2">
+          {onCancel && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onCancel}
+            >
+              Cancel
+            </Button>
           )}
-        />
-
-        <FormField
-          control={form.control}
-          name="meetingLink"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Meeting Link</FormLabel>
-              <FormControl>
-                <Input
-                  {...field}
-                  type="url"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
+          {mode === 'edit' && onDelete && (
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={onDelete}
+            >
+              Delete
+            </Button>
           )}
-        />
-
-        <FormField
-          control={form.control}
-          name="participants"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Participants (comma-separated emails)</FormLabel>
-              <FormControl>
-                <Input
-                  {...field}
-                  placeholder="user@example.com, user2@example.com"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <div className="flex justify-between">
-          {mode === 'edit' ? (
-            <>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="text-destructive"
-                onClick={onDelete}
-              >
-                Delete
-              </Button>
-              <Button
-                type="submit"
-                size="sm"
-              >
-                Save Changes
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={onCancel}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                size="sm"
-              >
-                Create
-              </Button>
-            </>
-          )}
+          <Button type="submit">{mode === 'create' ? 'Create' : 'Save'}</Button>
         </div>
       </form>
     </Form>

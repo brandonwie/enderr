@@ -12,22 +12,26 @@ import {
   useSensors,
   closestCenter,
 } from '@dnd-kit/core';
-import { ScheduleStatus } from '@shared/types/schedule';
+import { DragItemType, ScheduleStatus } from '@shared/types/schedule';
 
 import { Calendar } from '@/components/calendar';
 import { InboxSchedule } from '@/components/inbox-schedule';
 import { ScheduleCell } from '@/components/schedule-cell';
 import { Sidebar } from '@/components/sidebar';
 
+/**
+ * Interface for drag and drop data
+ * @remarks
+ * - For inbox items: only title, description, and duration are used
+ * - For schedule items: all fields except duration are used
+ */
 interface DragData {
-  type: 'inbox' | 'schedule';
+  type: DragItemType;
   title: string;
   description?: string;
   duration?: number;
   startTime?: Date;
   endTime?: Date;
-  location?: string;
-  meetingLink?: string;
   status?: ScheduleStatus;
 }
 
@@ -70,6 +74,33 @@ export default function Home() {
       return;
     }
 
+    // Handle dropping into inbox area
+    if (over.id === 'inbox' && activeDragData?.type === DragItemType.SCHEDULE) {
+      // First, convert schedule to inbox item
+      const scheduleToInboxEvent = new CustomEvent('scheduleToInbox', {
+        detail: {
+          id: active.id,
+          title: activeDragData.title,
+          description: activeDragData.description,
+        },
+        bubbles: true,
+      });
+      document.dispatchEvent(scheduleToInboxEvent);
+
+      // Then, delete the schedule from calendar
+      const deleteEvent = new CustomEvent('scheduleDelete', {
+        detail: {
+          id: active.id,
+        },
+        bubbles: true,
+      });
+      document.dispatchEvent(deleteEvent);
+
+      setActiveId(null);
+      setActiveDragData(null);
+      return;
+    }
+
     // Parse the drop target ID to get date and time
     // Format: "timestamp-hour-minute" (e.g., "1673827200000-9-30" for 9:30 on some date)
     const [dateStr, hour, minute] = over.id.split('-');
@@ -82,7 +113,7 @@ export default function Home() {
     }
 
     // Emit event for calendar to handle the drop
-    if (activeDragData?.type === 'inbox') {
+    if (activeDragData?.type === DragItemType.INBOX) {
       const dropEvent = new CustomEvent('inboxItemDropped', {
         detail: {
           id: active.id,
@@ -90,19 +121,17 @@ export default function Home() {
           hour: Number(hour),
           minute: Number(minute) || 0,
           data: {
-            type: 'inbox',
+            type: DragItemType.INBOX,
             title: activeDragData.title,
             description: activeDragData.description,
             duration: activeDragData.duration || 30,
-            location: activeDragData.location,
-            meetingLink: activeDragData.meetingLink,
           },
         },
         bubbles: true,
       });
       document.dispatchEvent(dropEvent);
     } else if (
-      activeDragData?.type === 'schedule' &&
+      activeDragData?.type === DragItemType.SCHEDULE &&
       activeDragData.startTime &&
       activeDragData.endTime
     ) {
@@ -126,8 +155,6 @@ export default function Home() {
           description: activeDragData.description,
           startTime,
           endTime,
-          location: activeDragData.location,
-          meetingLink: activeDragData.meetingLink,
           status: activeDragData.status,
         },
         bubbles: true,
@@ -160,14 +187,12 @@ export default function Home() {
       >
         {activeId && activeDragData && (
           <div className="w-[200px]">
-            {activeDragData.type === 'inbox' ? (
+            {activeDragData.type === DragItemType.INBOX ? (
               <InboxSchedule
                 id={activeId}
                 title={activeDragData.title}
                 description={activeDragData.description}
                 duration={activeDragData.duration || 30}
-                location={activeDragData.location}
-                meetingLink={activeDragData.meetingLink}
               />
             ) : (
               <ScheduleCell
@@ -176,8 +201,6 @@ export default function Home() {
                 description={activeDragData.description}
                 startTime={activeDragData.startTime!}
                 endTime={activeDragData.endTime!}
-                location={activeDragData.location}
-                meetingLink={activeDragData.meetingLink}
                 status={activeDragData.status || ScheduleStatus.SCHEDULED}
                 isDragOverlay
               />

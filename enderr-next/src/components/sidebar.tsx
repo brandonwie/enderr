@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react';
 
-import { ScheduleStatus } from '@shared/types/schedule';
+import { useDroppable } from '@dnd-kit/core';
+import { DragItemType, ScheduleStatus } from '@shared/types/schedule';
 
-import { InboxForm, InboxItemValues } from '@/components/inbox-form';
+import { InboxForm, type InboxFormValues } from '@/components/inbox-form';
 import { InboxSchedule } from '@/components/inbox-schedule';
 import { Button } from '@/components/ui/button';
 import {
@@ -16,13 +17,16 @@ import {
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
+/**
+ * Represents an item in the inbox
+ * @remarks These items don't have start/end times until placed on calendar
+ */
 interface InboxItem {
   id: string;
   title: string;
   description?: string;
+  /** Duration in minutes (default 30) */
   duration: number;
-  location?: string;
-  meetingLink?: string;
   status: ScheduleStatus.INBOX;
 }
 
@@ -33,6 +37,7 @@ interface InboxItem {
  * - Inbox items that can be dragged to calendar
  * - Button to create new inbox items
  * - Scrollable list of inbox items
+ * - Droppable area for returning items to inbox
  */
 export function Sidebar() {
   const [open, setOpen] = useState(false);
@@ -54,6 +59,14 @@ export function Sidebar() {
     },
   ]);
 
+  // Make inbox area droppable
+  const { setNodeRef } = useDroppable({
+    id: 'inbox',
+    data: {
+      type: 'inbox-area',
+    },
+  });
+
   // Listen for inbox item scheduled event
   useEffect(() => {
     const handleInboxItemScheduled = (event: CustomEvent) => {
@@ -61,9 +74,26 @@ export function Sidebar() {
       setInboxItems((prevItems) => prevItems.filter((item) => item.id !== id));
     };
 
+    // Listen for schedule items being moved to inbox
+    const handleScheduleToInbox = (event: CustomEvent) => {
+      const { id, title, description } = event.detail;
+      const newInboxItem: InboxItem = {
+        id,
+        title,
+        description,
+        duration: 30, // Reset to default duration
+        status: ScheduleStatus.INBOX,
+      };
+      setInboxItems((prev) => [...prev, newInboxItem]);
+    };
+
     document.addEventListener(
       'inboxItemScheduled',
       handleInboxItemScheduled as EventListener,
+    );
+    document.addEventListener(
+      'scheduleToInbox',
+      handleScheduleToInbox as EventListener,
     );
 
     return () => {
@@ -71,10 +101,14 @@ export function Sidebar() {
         'inboxItemScheduled',
         handleInboxItemScheduled as EventListener,
       );
+      document.removeEventListener(
+        'scheduleToInbox',
+        handleScheduleToInbox as EventListener,
+      );
     };
   }, []);
 
-  const handleCreateInboxItem = (data: InboxItemValues) => {
+  const handleCreateInboxItem = (data: InboxFormValues) => {
     const newItem: InboxItem = {
       id: crypto.randomUUID(),
       ...data,
@@ -86,7 +120,10 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="flex h-full flex-col border-r bg-card p-4">
+    <aside
+      ref={setNodeRef}
+      className="flex h-full flex-col border-r bg-card p-4"
+    >
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold">Inbox</h2>
         <Dialog

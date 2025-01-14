@@ -1,3 +1,4 @@
+import { useRef, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -13,72 +14,61 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 
 // Schema for the form input values
-const inboxFormSchema = z.object({
+const inboxSchema = z.object({
+  /** Title of the schedule */
   title: z.string().min(1, 'Title is required'),
+  /** Optional description */
   description: z.string().optional(),
   /** Duration in minutes */
-  duration: z.string(),
-  location: z.string().optional(),
-  meetingLink: z.string().url().optional().or(z.literal('')),
+  duration: z.number().min(1, 'Duration must be at least 1 minute'),
 });
 
-// Schema for the transformed output values
-const inboxItemSchema = inboxFormSchema.transform((data) => ({
-  ...data,
-  duration: Number(data.duration),
-}));
-
 // Type for the form values (before transform)
-type InboxFormValues = z.infer<typeof inboxFormSchema>;
-// Type for the transformed values (after submit)
-export type InboxItemValues = z.infer<typeof inboxItemSchema>;
+export type InboxFormValues = z.infer<typeof inboxSchema>;
 
 interface InboxFormProps {
-  onSubmit: (data: InboxItemValues) => void;
-  onCancel: () => void;
+  onSubmit: (data: InboxFormValues) => void;
+  onCancel?: () => void;
 }
+
+const defaultValues: InboxFormValues = {
+  title: '',
+  description: '',
+  duration: 30,
+};
 
 /**
  * InboxForm Component
  * @remarks
  * Form for creating new inbox items
- * Includes fields for:
- * - Title (required)
- * - Description
- * - Duration (required, in minutes)
- * - Location
- * - Meeting Link
+ * Only requires:
+ * - Title
+ * - Description (optional)
+ * - Duration (defaults to 30 minutes)
  */
 export function InboxForm({ onSubmit, onCancel }: InboxFormProps) {
+  const titleInputRef = useRef<HTMLInputElement>(null);
   const form = useForm<InboxFormValues>({
-    resolver: zodResolver(inboxFormSchema),
-    defaultValues: {
-      title: '',
-      description: '',
-      duration: '30',
-      location: '',
-      meetingLink: '',
-    },
+    resolver: zodResolver(inboxSchema),
+    defaultValues,
   });
 
-  const handleSubmit = (data: InboxFormValues) => {
-    onSubmit(inboxItemSchema.parse(data));
-  };
+  // Focus title input on mount
+  useEffect(() => {
+    // Small delay to ensure popover is mounted
+    const timeoutId = setTimeout(() => {
+      titleInputRef.current?.focus();
+    }, 50);
+    return () => clearTimeout(timeoutId);
+  }, []);
 
   return (
     <Form {...form}>
       <form
-        onSubmit={form.handleSubmit(handleSubmit)}
-        className="space-y-4"
+        onSubmit={form.handleSubmit(onSubmit)}
+        className="space-y-4 px-4"
       >
         <FormField
           control={form.control}
@@ -89,8 +79,11 @@ export function InboxForm({ onSubmit, onCancel }: InboxFormProps) {
               <FormControl>
                 <Input
                   {...field}
-                  placeholder="Enter task title"
-                  autoFocus
+                  ref={(e) => {
+                    field.ref(e);
+                    titleInputRef.current = e;
+                  }}
+                  placeholder="Enter title"
                 />
               </FormControl>
               <FormMessage />
@@ -107,7 +100,7 @@ export function InboxForm({ onSubmit, onCancel }: InboxFormProps) {
               <FormControl>
                 <Input
                   {...field}
-                  placeholder="Enter task description"
+                  placeholder="Enter description (optional)"
                 />
               </FormControl>
               <FormMessage />
@@ -120,40 +113,13 @@ export function InboxForm({ onSubmit, onCancel }: InboxFormProps) {
           name="duration"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Duration</FormLabel>
-              <Select
-                onValueChange={field.onChange}
-                defaultValue={field.value}
-              >
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select duration" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  <SelectItem value="15">15 minutes</SelectItem>
-                  <SelectItem value="30">30 minutes</SelectItem>
-                  <SelectItem value="45">45 minutes</SelectItem>
-                  <SelectItem value="60">1 hour</SelectItem>
-                  <SelectItem value="90">1.5 hours</SelectItem>
-                  <SelectItem value="120">2 hours</SelectItem>
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="location"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Location</FormLabel>
+              <FormLabel>Duration (minutes)</FormLabel>
               <FormControl>
                 <Input
                   {...field}
-                  placeholder="Enter location (optional)"
+                  type="number"
+                  min={1}
+                  onChange={(e) => field.onChange(parseInt(e.target.value, 10))}
                 />
               </FormControl>
               <FormMessage />
@@ -161,32 +127,16 @@ export function InboxForm({ onSubmit, onCancel }: InboxFormProps) {
           )}
         />
 
-        <FormField
-          control={form.control}
-          name="meetingLink"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Meeting Link</FormLabel>
-              <FormControl>
-                <Input
-                  {...field}
-                  type="url"
-                  placeholder="Enter meeting link (optional)"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
+        <div className="flex justify-end gap-2">
+          {onCancel && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onCancel}
+            >
+              Cancel
+            </Button>
           )}
-        />
-
-        <div className="flex justify-end gap-2 pt-4">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={onCancel}
-          >
-            Cancel
-          </Button>
           <Button type="submit">Create</Button>
         </div>
       </form>

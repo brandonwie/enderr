@@ -20,34 +20,13 @@ interface NewSchedule {
   endTime: Date;
   title: string;
   description?: string;
-  location?: string;
-  meetingLink?: string;
-  /** Current status of the schedule */
+  duration: number;
   status: ScheduleStatus;
 }
 
 // Full schedule type with ID for saved schedules
-interface Schedule {
+interface Schedule extends NewSchedule {
   id: string;
-  title: string;
-  description?: string;
-  startTime: Date;
-  endTime: Date;
-  location?: string;
-  meetingLink?: string;
-  status: ScheduleStatus;
-}
-
-interface DayHeaderProps {
-  dayName: string;
-  dayNumber: number;
-  isToday: boolean;
-  index: number;
-}
-
-interface TimeSlotProps {
-  hour: number;
-  label: string;
 }
 
 /**
@@ -140,7 +119,6 @@ export function Calendar() {
 
   // State for schedules
   const [schedules, setSchedules] = useState<Schedule[]>([
-    // Example schedule for demonstration
     {
       id: crypto.randomUUID(),
       startTime: (() => {
@@ -154,7 +132,7 @@ export function Calendar() {
         return date;
       })(),
       title: 'Example Meeting',
-      location: 'Conference Room',
+      duration: 60,
       status: ScheduleStatus.SCHEDULED,
     },
   ]);
@@ -175,6 +153,7 @@ export function Calendar() {
         title: '',
         startTime,
         endTime,
+        duration: 30,
         status: ScheduleStatus.SCHEDULED,
       },
     ]);
@@ -183,16 +162,8 @@ export function Calendar() {
 
   // Handle new schedule submission
   const handleCreateSchedule = (data: ScheduleFormValues) => {
-    const [hours, minutes] = data.startTime.split(':').map(Number);
-    const [endHours, endMinutes] = data.endTime.split(':').map(Number);
-
-    const startTime = new Date(data.date);
-    startTime.setHours(hours, minutes, 0);
-
-    const endTime = new Date(data.date);
-    endTime.setHours(endHours, endMinutes, 0);
-
-    if (endTime <= startTime) {
+    // No need for date manipulation since we get Date objects directly
+    if (data.endTime <= data.startTime) {
       // TODO: Show error toast
       console.error('End time must be after start time');
       return;
@@ -204,8 +175,6 @@ export function Calendar() {
           return {
             ...schedule,
             ...data,
-            startTime,
-            endTime,
           };
         }
         return schedule;
@@ -248,54 +217,30 @@ export function Calendar() {
     [],
   );
 
-  // Listen for schedule updates
+  // Listen for events
   useEffect(() => {
-    const handleScheduleUpdate = (e: CustomEvent<Schedule>) => {
-      setSchedules((prev) =>
-        prev.map((schedule) =>
-          schedule.id === e.detail.id ? e.detail : schedule,
-        ),
-      );
-    };
-
-    // Listen for schedule deletions
-    const handleScheduleDelete = (
-      e: CustomEvent<{ id: string; schedule: Omit<Schedule, 'id'> }>,
-    ) => {
-      setSchedules((prev) =>
-        prev.filter((schedule) => schedule.id !== e.detail.id),
-      );
-      // TODO: Show toast notification with undo option
-      // TODO: Queue deletion for API call
-    };
-
-    // Listen for inbox item drops
     const handleInboxItemDropped = (event: CustomEvent) => {
       const { id, date, hour, minute, data } = event.detail;
 
-      // Create start and end times
+      // Create new schedule from inbox item
       const startTime = new Date(date);
       startTime.setHours(hour, minute, 0, 0);
-
       const endTime = new Date(startTime);
       endTime.setMinutes(startTime.getMinutes() + (data.duration || 30));
 
-      // Create new schedule from inbox item
       const newSchedule: Schedule = {
-        id: id as string,
+        id,
         title: data.title,
         description: data.description,
         startTime,
         endTime,
-        location: data.location,
-        meetingLink: data.meetingLink,
+        duration: data.duration || 30,
         status: ScheduleStatus.SCHEDULED,
       };
 
-      // Add to schedules state
       setSchedules((prev) => [...prev, newSchedule]);
 
-      // Emit event to remove from inbox
+      // Notify inbox that item has been scheduled
       const scheduledEvent = new CustomEvent('inboxItemScheduled', {
         detail: { id },
         bubbles: true,
@@ -303,6 +248,35 @@ export function Calendar() {
       document.dispatchEvent(scheduledEvent);
     };
 
+    const handleScheduleUpdate = (event: CustomEvent) => {
+      const { id, title, description, startTime, endTime, status } =
+        event.detail;
+
+      setSchedules((prev) =>
+        prev.map((schedule) =>
+          schedule.id === id
+            ? {
+                ...schedule,
+                title,
+                description,
+                startTime: new Date(startTime),
+                endTime: new Date(endTime),
+                status,
+              }
+            : schedule,
+        ),
+      );
+    };
+
+    const handleScheduleDelete = (event: CustomEvent) => {
+      const { id } = event.detail;
+      setSchedules((prev) => prev.filter((schedule) => schedule.id !== id));
+    };
+
+    document.addEventListener(
+      'inboxItemDropped',
+      handleInboxItemDropped as EventListener,
+    );
     document.addEventListener(
       'scheduleUpdate',
       handleScheduleUpdate as EventListener,
@@ -311,12 +285,12 @@ export function Calendar() {
       'scheduleDelete',
       handleScheduleDelete as EventListener,
     );
-    document.addEventListener(
-      'inboxItemDropped',
-      handleInboxItemDropped as EventListener,
-    );
 
     return () => {
+      document.removeEventListener(
+        'inboxItemDropped',
+        handleInboxItemDropped as EventListener,
+      );
       document.removeEventListener(
         'scheduleUpdate',
         handleScheduleUpdate as EventListener,
@@ -324,10 +298,6 @@ export function Calendar() {
       document.removeEventListener(
         'scheduleDelete',
         handleScheduleDelete as EventListener,
-      );
-      document.removeEventListener(
-        'inboxItemDropped',
-        handleInboxItemDropped as EventListener,
       );
     };
   }, []);
@@ -436,25 +406,14 @@ export function Calendar() {
               mode="create"
               defaultValues={{
                 title: '',
-                date:
+                status: ScheduleStatus.SCHEDULED,
+                duration: 30,
+                startTime:
                   schedules.find((s) => s.id === newScheduleId)?.startTime ||
                   new Date(),
-                startTime:
-                  schedules
-                    .find((s) => s.id === newScheduleId)
-                    ?.startTime.toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      hour12: false,
-                    }) || '',
                 endTime:
-                  schedules
-                    .find((s) => s.id === newScheduleId)
-                    ?.endTime.toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      hour12: false,
-                    }) || '',
+                  schedules.find((s) => s.id === newScheduleId)?.endTime ||
+                  addMinutes(new Date(), 30),
               }}
               onSubmit={handleCreateSchedule}
               onCancel={handleCancelCreate}

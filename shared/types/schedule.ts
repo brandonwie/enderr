@@ -19,6 +19,19 @@ export enum ScheduleStatus {
 }
 
 /**
+ * Represents the type of item being dragged
+ * @remarks Used in drag and drop operations to differentiate between:
+ * - INBOX: Items from inbox being placed on calendar
+ * - SCHEDULE: Existing schedule items being moved
+ */
+export enum DragItemType {
+  /** Item from inbox being dragged to calendar */
+  INBOX = "inbox",
+  /** Schedule being moved within calendar */
+  SCHEDULE = "schedule",
+}
+
+/**
  * Represents a schedule/event in the system
  * @remarks This is the main entity for calendar events
  * @remarks When status is INBOX:

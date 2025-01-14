@@ -1,6 +1,6 @@
 import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { ScheduleStatus } from '@shared/types/schedule';
+import { DragItemType, ScheduleStatus } from '@shared/types/schedule';
 
 interface InboxScheduleProps {
   id: string;
@@ -8,8 +8,6 @@ interface InboxScheduleProps {
   description?: string;
   /** Duration in minutes (default 30) */
   duration: number;
-  location?: string;
-  meetingLink?: string;
   isDragging?: boolean;
 }
 
@@ -26,8 +24,6 @@ export function InboxSchedule({
   title,
   description,
   duration = 30,
-  location,
-  meetingLink,
   isDragging,
 }: InboxScheduleProps) {
   // Set up draggable functionality
@@ -40,12 +36,10 @@ export function InboxSchedule({
   } = useDraggable({
     id,
     data: {
-      type: 'inbox',
+      type: DragItemType.INBOX,
       duration,
       title,
       description,
-      location,
-      meetingLink,
       status: ScheduleStatus.INBOX,
     },
   });
@@ -78,13 +72,6 @@ export function InboxSchedule({
           </p>
         </div>
       </div>
-
-      {/* Optional Location/Link Display */}
-      {(location || meetingLink) && (
-        <p className="mt-1 truncate text-xs text-muted-foreground">
-          {location || meetingLink}
-        </p>
-      )}
     </div>
   );
 }
