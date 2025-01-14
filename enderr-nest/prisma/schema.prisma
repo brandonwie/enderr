@@ -62,7 +62,6 @@ model Schedule {
   endTime     DateTime?
   duration    Int          // Duration in minutes
   status      ScheduleStatus
-  location    String?
   creator     User         @relation("CreatedSchedules", fields: [creatorId], references: [id])
   creatorId   String
   participants User[]      @relation("ParticipatingSchedules")

@@ -68,7 +68,6 @@ export class ScheduleService {
         endTime: data.endTime,
         duration: data.duration || 30,
         status: data.status || ScheduleStatus.INBOX,
-        location: data.location,
         creator: {
           connect: { id: userId },
         },
@@ -135,7 +134,6 @@ export class ScheduleService {
       endTime: data.endTime,
       duration: data.duration,
       status: data.status,
-      location: data.location,
       participants: data.participants
         ? {
             set: [], // Clear existing

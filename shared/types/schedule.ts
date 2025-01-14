@@ -38,8 +38,6 @@ export interface Schedule {
   endTime?: Date;
   /** Duration in minutes (used when schedule is in INBOX status) */
   duration: number;
-  /** Physical or virtual location of the schedule */
-  location?: string;
   /** Current status of the schedule */
   status: ScheduleStatus;
   /** Notes linked to this schedule */
