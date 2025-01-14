@@ -36,6 +36,23 @@ enum ScheduleStatus {
   COMPLETED
 }
 
+// Block type enum
+enum BlockType {
+  p       // Paragraph
+  h1      // Heading 1
+  h2      // Heading 2
+  h3      // Heading 3
+  code    // Code block
+}
+
+// Block operation type enum
+enum BlockOperationType {
+  update
+  create
+  delete
+  move
+}
+
 // Schedule model
 model Schedule {
   id          String        @id @default(uuid())
@@ -54,6 +71,8 @@ model Schedule {
   updatedAt   DateTime     @updatedAt
 
   @@map("schedules")
+  @@unique([creatorId, id])  // Ensures creator's schedules are unique
+  @@index([creatorId])       // For faster lookups by creator
 }
 
 // Note model
@@ -71,12 +90,14 @@ model Note {
   updatedAt    DateTime   @updatedAt
 
   @@map("notes")
+  @@unique([creatorId, id])  // Ensures creator's notes are unique
+  @@index([creatorId])       // For faster lookups by creator
 }
 
 // Block model for note content
 model Block {
   id        String   @id @default(uuid())
-  type      String   // paragraph, heading1, etc.
+  type      BlockType
   content   String
   order     Int
   note      Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)

@@ -2,6 +2,29 @@ import { Schedule } from "./schedule";
 import { UserBasicInfo } from "./user";
 
 /**
+ * Enum for different types of blocks in a note
+ * @remarks Similar to Notion's block types
+ */
+export enum NoteBlockType {
+  PARAGRAPH = "p",
+  HEADING1 = "h1",
+  HEADING2 = "h2",
+  HEADING3 = "h3",
+  CODE = "code",
+}
+
+/**
+ * Enum for different types of block operations
+ * @remarks Used in collaborative editing
+ */
+export enum BlockOperationType {
+  UPDATE = "update",
+  CREATE = "create",
+  DELETE = "delete",
+  MOVE = "move",
+}
+
+/**
  * Represents a block in a note
  * @remarks Each line in the note is a block, similar to Notion
  */
@@ -9,7 +32,7 @@ export interface NoteBlock {
   /** Unique identifier for the block */
   id: string;
   /** Block type (paragraph, heading, etc.) */
-  type: "p" | "h1" | "h2" | "h3" | "code";
+  type: NoteBlockType;
   /** Block content in markdown */
   content: string;
   /** Order of the block in the note */
@@ -49,11 +72,11 @@ export interface BlockOperation {
   /** ID of the block being modified */
   blockId: string;
   /** Type of operation */
-  type: "update" | "create" | "delete" | "move";
+  type: BlockOperationType;
   /** Current content of the block (for update operations) */
   content?: string;
   /** New block type (for create/update operations) */
-  blockType?: NoteBlock["type"];
+  blockType?: NoteBlockType;
   /** New order position (for move operations) */
   order?: number;
   /** Base version of the block when operation was created */

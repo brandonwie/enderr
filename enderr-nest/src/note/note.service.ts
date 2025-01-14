@@ -184,8 +184,31 @@ export class NoteService {
   /**
    * Adds a collaborator to a note
    * @remarks Collaborators can edit the note and see its history
+   * @throws {BadRequestException} If trying to add creator as collaborator or duplicate collaborator
    */
   async addCollaborator(noteId: string, userId: string) {
+    const note = await this.prisma.note.findUnique({
+      where: { id: noteId },
+      include: {
+        creator: true,
+        collaborators: true,
+      },
+    });
+
+    if (!note) {
+      throw new NotFoundException(`Note ${noteId} not found`);
+    }
+
+    // Check if user is the creator
+    if (note.creatorId === userId) {
+      throw new BadRequestException('Cannot add creator as collaborator');
+    }
+
+    // Check if user is already a collaborator
+    if (note.collaborators.some((c) => c.id === userId)) {
+      throw new BadRequestException('User is already a collaborator');
+    }
+
     return this.prisma.note.update({
       where: { id: noteId },
       data: {

@@ -1,4 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { DynamoDBService } from '../dynamodb.service';
 import { CustomLogger } from '../logger/logger.service';
@@ -50,6 +54,11 @@ export class ScheduleService {
    * Create a new schedule
    */
   async create(data: Partial<Schedule>, userId: string) {
+    // Validate participants don't include creator
+    if (data.participants?.some((p) => p.id === userId)) {
+      throw new BadRequestException('Creator cannot be added as participant');
+    }
+
     // Create in PostgreSQL
     const schedule = await this.prisma.schedule.create({
       data: {
@@ -94,6 +103,30 @@ export class ScheduleService {
    * Update a schedule
    */
   async update(id: string, data: Partial<Schedule>) {
+    // Get current schedule to check creator
+    const currentSchedule = await this.prisma.schedule.findUnique({
+      where: { id },
+      include: { creator: true, participants: true },
+    });
+
+    if (!currentSchedule) {
+      throw new NotFoundException(`Schedule ${id} not found`);
+    }
+
+    // Validate participants don't include creator
+    if (data.participants?.some((p) => p.id === currentSchedule.creatorId)) {
+      throw new BadRequestException('Creator cannot be added as participant');
+    }
+
+    // Check for duplicate participants
+    const uniqueParticipantIds = new Set(data.participants?.map((p) => p.id));
+    if (
+      data.participants &&
+      uniqueParticipantIds.size !== data.participants.length
+    ) {
+      throw new BadRequestException('Duplicate participants are not allowed');
+    }
+
     // Convert shared type to Prisma input type
     const updateData: Prisma.ScheduleUpdateInput = {
       title: data.title,
