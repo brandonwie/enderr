@@ -14,6 +14,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { useSchedules, useCreateSchedule } from '@/hooks/use-schedule';
+import { apiClient, API_ENDPOINTS } from '@/lib/api-client';
 import {
   InboxItemDroppedEvent,
   ScheduleDeleteEvent,
@@ -45,6 +46,9 @@ interface Schedule extends NewSchedule {
  * @remarks
  * Represents a 30-minute droppable time slot in the calendar grid
  * Each hour is divided into two slots (XX:00 and XX:30)
+ * - Hover effect shows light primary color
+ * - Drop target highlight when dragging over
+ * - Border on half-hour slots
  *
  * @param id - Unique identifier for the time slot (format: "timestamp-hour-minute")
  * @param onClick - Handler for creating new schedules
@@ -68,7 +72,7 @@ function TimeSlot({
       ref={setNodeRef}
       data-droppable-id={id}
       className={cn(
-        'h-5 transition-colors',
+        'h-5 transition-colors hover:bg-primary/5',
         isHalfHour && 'border-b border-border',
         isOver && 'bg-primary/10',
         active && 'relative z-10',
@@ -131,9 +135,18 @@ export function Calendar() {
   // State for new schedule creation
   const [newScheduleId, setNewScheduleId] = useState<string | null>(null);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [tempSchedule, setTempSchedule] = useState<{
+    id: string;
+    title: string;
+    startTime: Date;
+    endTime: Date;
+    duration: number;
+    status: ScheduleStatus;
+    description?: string;
+  } | null>(null);
 
-  // Fetch schedules using React Query
-  const { data: schedules = [] } = useSchedules();
+  // Fetch schedules using React Query with pre-filtered data
+  const { data: calendarSchedules = [] } = useSchedules('calendar');
   const { mutate: createSchedule } = useCreateSchedule();
 
   // Generate array of days for the current week
@@ -236,6 +249,7 @@ export function Calendar() {
       removeScheduleUpdate();
       removeScheduleDelete();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Handle cell click for new schedule
@@ -249,36 +263,64 @@ export function Calendar() {
     const endTime = new Date(startTime);
     endTime.setMinutes(startTime.getMinutes() + 30);
 
-    // Create a temporary schedule
-    createSchedule({
-      title: '',
+    // Create temporary schedule with visual placeholder
+    setTempSchedule({
+      id,
+      title: 'New Schedule',
       startTime,
       endTime,
       duration: 30,
       status: ScheduleStatus.SCHEDULED,
+      description: '',
     });
     setNewScheduleId(id);
   };
 
   // Handle new schedule submission
-  const handleCreateSchedule = (
+  const handleCreateSchedule = async (
     data: ScheduleFormValues & { endTime: Date },
   ) => {
-    // Update the schedule
-    createSchedule({
-      ...data,
-      // Ensure we preserve the timezone
-      startTime: new Date(data.startTime),
-      endTime: new Date(data.endTime),
-    });
-    setNewScheduleId(null);
-    setMousePosition({ x: 0, y: 0 });
+    console.log('Calendar handleCreateSchedule called with:', data);
+    if (!tempSchedule) {
+      console.error('No temporary schedule found');
+      return;
+    }
+
+    try {
+      console.log('Making API request to create schedule');
+      // Create the schedule using apiClient
+      const response = await apiClient.post(API_ENDPOINTS.schedules.create(), {
+        title: data.title,
+        description: data.description,
+        startTime: new Date(data.startTime),
+        endTime: data.endTime,
+        duration: data.duration,
+        status: data.status,
+      });
+
+      console.log('API response:', response);
+
+      if (!response.data) {
+        throw new Error('Failed to create schedule');
+      }
+
+      // Clean up temporary state after submission
+      setNewScheduleId(null);
+      setMousePosition({ x: 0, y: 0 });
+      setTempSchedule(null);
+
+      // Reload the page to refresh data
+      window.location.reload();
+    } catch (error) {
+      console.error('Failed to create schedule:', error);
+    }
   };
 
   // Handle new schedule cancellation
   const handleCancelCreate = () => {
     setNewScheduleId(null);
     setMousePosition({ x: 0, y: 0 });
+    setTempSchedule(null);
   };
 
   return (
@@ -343,14 +385,27 @@ export function Calendar() {
               ))}
 
               {/* Schedule items */}
-              {schedules
-                .filter((schedule) => isSameDay(schedule.startTime, date))
+              {calendarSchedules
+                .filter((schedule) => {
+                  // Only show schedules for this day column
+                  const scheduleDate = new Date(schedule.startTime);
+                  return isSameDay(scheduleDate, date);
+                })
                 .map((schedule) => (
                   <ScheduleCell
                     key={schedule.id}
                     {...schedule}
                   />
                 ))}
+
+              {/* Temporary schedule cell */}
+              {tempSchedule && isSameDay(tempSchedule.startTime, date) && (
+                <ScheduleCell
+                  key={tempSchedule.id}
+                  {...tempSchedule}
+                  isDragOverlay={false}
+                />
+              )}
             </div>
           ))}
 
@@ -360,7 +415,7 @@ export function Calendar() {
       </div>
 
       {/* New schedule popover */}
-      {newScheduleId && (
+      {newScheduleId && tempSchedule && (
         <Popover
           open={true}
           onOpenChange={(open) => !open && handleCancelCreate()}
@@ -387,13 +442,13 @@ export function Calendar() {
               defaultValues={{
                 title: '',
                 description: '',
-                startTime:
-                  schedules.find((s) => s.id === newScheduleId)?.startTime ||
-                  new Date(),
-                duration: 30,
+                startTime: tempSchedule.startTime,
+                duration: tempSchedule.duration,
                 status: ScheduleStatus.SCHEDULED,
                 participants: [],
               }}
+              onSubmit={handleCreateSchedule}
+              onCancel={handleCancelCreate}
             />
           </PopoverContent>
         </Popover>

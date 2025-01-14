@@ -27,6 +27,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useCreateSchedule, useUpdateSchedule } from '@/hooks/use-schedule';
+import { API_ENDPOINTS, apiClient } from '@/lib/api-client';
 
 // Base schema that both create and edit will use
 const baseScheduleSchema = {
@@ -97,6 +98,7 @@ interface ScheduleFormProps {
   defaultValues: DefaultValues;
   onCancel?: () => void;
   onDelete?: () => void;
+  onSubmit?: (data: ScheduleFormValues & { endTime: Date }) => void;
   mode: 'create' | 'edit';
 }
 
@@ -115,22 +117,12 @@ export function ScheduleForm({
   defaultValues,
   onCancel,
   onDelete,
+  onSubmit,
   mode,
 }: ScheduleFormProps) {
   const titleInputRef = useRef<HTMLInputElement>(null);
-  const [endTime, setEndTime] = useState<Date | null>(() => {
-    if (defaultValues.startTime && defaultValues.endTime) {
-      return defaultValues.endTime;
-    }
-    if (defaultValues.startTime && defaultValues.duration) {
-      return addMinutes(defaultValues.startTime, defaultValues.duration);
-    }
-    return null;
-  });
 
-  const { mutate: createSchedule, isPending: isCreating } = useCreateSchedule();
-  const { mutate: updateSchedule, isPending: isUpdating } = useUpdateSchedule();
-
+  // Initialize form with default values
   const form = useForm<ScheduleFormValues>({
     resolver: zodResolver(
       mode === 'create' ? createScheduleSchema : editScheduleSchema,
@@ -139,6 +131,10 @@ export function ScheduleForm({
       title: defaultValues.title || '',
       description: defaultValues.description || '',
       startTime: defaultValues.startTime || new Date(),
+      endTime: addMinutes(
+        defaultValues.startTime || new Date(),
+        defaultValues.duration || 30,
+      ),
       status: defaultValues.status || ScheduleStatus.SCHEDULED,
       duration: defaultValues.duration || 30,
       participants: defaultValues.participants || [],
@@ -161,10 +157,15 @@ export function ScheduleForm({
     const duration = form.watch('duration');
 
     if (startTime && duration) {
+      console.log('Updating endTime with:', { startTime, duration });
       const newEndTime = addMinutes(startTime, duration);
-      setEndTime(newEndTime);
+      console.log('New endTime:', newEndTime);
+      form.setValue('endTime', newEndTime);
     }
-  }, [form.watch('startTime'), form.watch('duration')]);
+  }, [form.watch('startTime'), form.watch('duration'), form]);
+
+  const { mutate: createSchedule, isPending: isCreating } = useCreateSchedule();
+  const { mutate: updateSchedule, isPending: isUpdating } = useUpdateSchedule();
 
   // Type guard to check if data is EditScheduleValues
   const isEditScheduleValues = (
@@ -174,12 +175,11 @@ export function ScheduleForm({
   };
 
   // Handle form submission with calculated endTime
-  const handleSubmit = (data: ScheduleFormValues) => {
-    if (!endTime) return;
+  const handleFormSubmit = async (data: ScheduleFormValues) => {
+    console.log('Form submitted with data:', data);
 
     const scheduleData = {
       ...data,
-      endTime,
       // Only include participants if in edit mode and they exist
       ...(isEditScheduleValues(data) && data.participants
         ? {
@@ -193,13 +193,39 @@ export function ScheduleForm({
         : {}),
     };
 
-    if (mode === 'create') {
-      createSchedule(scheduleData);
-    } else {
-      updateSchedule({
-        ...scheduleData,
-        id: (data as EditScheduleValues).id,
-      });
+    try {
+      if (onSubmit) {
+        console.log('Calling parent onSubmit with data:', scheduleData);
+        onSubmit(scheduleData);
+        return;
+      }
+
+      // If no onSubmit prop, use apiClient
+      if (mode === 'create') {
+        console.log('Creating schedule with data:', scheduleData);
+        const response = await apiClient.post(
+          API_ENDPOINTS.schedules.create(),
+          scheduleData,
+        );
+
+        if (!response.data) {
+          throw new Error('Failed to create schedule');
+        }
+      } else {
+        const response = await apiClient.patch(
+          API_ENDPOINTS.schedules.update((data as EditScheduleValues).id),
+          scheduleData,
+        );
+
+        if (!response.data) {
+          throw new Error('Failed to update schedule');
+        }
+      }
+
+      // Reload the page to refresh data
+      window.location.reload();
+    } catch (error) {
+      console.error('Failed to submit schedule:', error);
     }
   };
 
@@ -208,7 +234,7 @@ export function ScheduleForm({
   return (
     <Form {...form}>
       <form
-        onSubmit={form.handleSubmit(handleSubmit)}
+        onSubmit={form.handleSubmit(handleFormSubmit)}
         className="space-y-4 px-4 py-2"
       >
         <FormField
@@ -315,10 +341,10 @@ export function ScheduleForm({
           />
 
           {/* Display calculated end time */}
-          {endTime && (
+          {form.watch('endTime') && (
             <div className="text-sm text-muted-foreground">
               End Time:{' '}
-              {endTime.toLocaleTimeString([], {
+              {form.watch('endTime').toLocaleTimeString([], {
                 hour: '2-digit',
                 minute: '2-digit',
               })}

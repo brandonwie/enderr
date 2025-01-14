@@ -1,3 +1,6 @@
+'use client';
+
+import { API_PATHS } from '@shared/constants';
 import { Schedule } from '@shared/types/schedule';
 import axios, {
   AxiosError,
@@ -8,15 +11,43 @@ import axios, {
 const TOKEN_KEY = 'auth_tokens';
 
 /**
- * Axios instance for API calls
- * @remarks Configured with default settings for our API and automatic token refresh
+ * Safe localStorage access that works in both client and server
+ */
+export const safeStorage = {
+  getItem: (key: string): string | null => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem(key);
+    }
+    return null;
+  },
+  setItem: (key: string, value: string): void => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(key, value);
+    }
+  },
+  removeItem: (key: string): void => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(key);
+    }
+  },
+};
+
+/**
+ * API client instance
+ * @remarks
+ * - Includes default configuration
+ * - Handles auth token automatically
+ * - Provides type-safe endpoints
  */
 export const apiClient = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
 // Initialize auth header from stored token
-const storedTokens = localStorage.getItem(TOKEN_KEY);
+const storedTokens = safeStorage.getItem(TOKEN_KEY);
 if (storedTokens) {
   try {
     const { access_token } = JSON.parse(storedTokens);
@@ -25,7 +56,7 @@ if (storedTokens) {
     }
   } catch (error) {
     console.error('Failed to parse stored tokens:', error);
-    localStorage.removeItem(TOKEN_KEY);
+    safeStorage.removeItem(TOKEN_KEY);
   }
 }
 
@@ -92,7 +123,7 @@ apiClient.interceptors.response.use(
 
     try {
       // Get stored tokens
-      const storedTokens = localStorage.getItem(TOKEN_KEY);
+      const storedTokens = safeStorage.getItem(TOKEN_KEY);
       if (!storedTokens) {
         throw new Error('No refresh token available');
       }
@@ -108,7 +139,7 @@ apiClient.interceptors.response.use(
       );
 
       // Save new tokens
-      localStorage.setItem(TOKEN_KEY, JSON.stringify(newTokens));
+      safeStorage.setItem(TOKEN_KEY, JSON.stringify(newTokens));
       apiClient.defaults.headers.common['Authorization'] =
         `Bearer ${newTokens.access_token}`;
 
@@ -123,7 +154,7 @@ apiClient.interceptors.response.use(
           : new Error('Token refresh failed'),
       );
       // Clear stored tokens
-      localStorage.removeItem(TOKEN_KEY);
+      safeStorage.removeItem(TOKEN_KEY);
       delete apiClient.defaults.headers.common['Authorization'];
       return Promise.reject(refreshError);
     } finally {
@@ -133,8 +164,11 @@ apiClient.interceptors.response.use(
 );
 
 /**
- * API endpoints
- * @remarks Type-safe endpoint definitions
+ * API endpoints configuration
+ * @remarks
+ * - Type-safe endpoint paths
+ * - Centralized endpoint management
+ * - Follows REST conventions
  */
 export const API_ENDPOINTS = {
   auth: {
@@ -144,11 +178,23 @@ export const API_ENDPOINTS = {
     refresh: () => '/auth/refresh',
   },
   schedules: {
-    list: () => '/schedules',
-    detail: (id: string) => `/schedules/${id}`,
-    create: () => '/schedules',
-    update: (id: string) => `/schedules/${id}`,
-    delete: (id: string) => `/schedules/${id}`,
+    list: () => API_PATHS.SCHEDULES.BASE,
+    detail: (id: string) => `${API_PATHS.SCHEDULES.BASE}/${id}`,
+    create: () => API_PATHS.SCHEDULES.BASE,
+    update: (id: string) => `${API_PATHS.SCHEDULES.BASE}/${id}`,
+    delete: (id: string) => `${API_PATHS.SCHEDULES.BASE}/${id}`,
+    /** Get inbox items */
+    inbox: () => API_PATHS.SCHEDULES.INBOX,
+    /** Update inbox item order */
+    inboxOrder: () => `${API_PATHS.SCHEDULES.INBOX}/order`,
+  },
+  notes: {
+    list: () => API_PATHS.NOTES.BASE,
+    detail: (id: string) => `${API_PATHS.NOTES.BASE}/${id}`,
+    create: () => API_PATHS.NOTES.BASE,
+    update: (id: string) => `${API_PATHS.NOTES.BASE}/${id}`,
+    delete: (id: string) => `${API_PATHS.NOTES.BASE}/${id}`,
+    operations: () => API_PATHS.NOTES.OPERATIONS,
   },
 } as const;
 

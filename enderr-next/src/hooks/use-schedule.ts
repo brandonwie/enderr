@@ -1,14 +1,15 @@
 'use client';
 
+import {
+  CreateScheduleInput,
+  OptimisticSchedule,
+  Schedule,
+  ScheduleStatus,
+  UpdateScheduleInput,
+} from '@shared/types/schedule';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { apiClient, API_ENDPOINTS } from '@/lib/api-client';
-
-import {
-  CreateScheduleInput,
-  Schedule,
-  UpdateScheduleInput,
-} from '../shared/types/schedule';
 
 // Query keys
 export const scheduleKeys = {
@@ -42,10 +43,34 @@ const updateSchedule = async (data: UpdateScheduleInput): Promise<Schedule> => {
 };
 
 // Hooks
-export function useSchedules() {
+export function useSchedules(type?: 'calendar' | 'inbox') {
   return useQuery({
     queryKey: scheduleKeys.lists(),
     queryFn: getSchedules,
+    select: (data) => {
+      if (type === 'calendar') {
+        return data
+          .filter(
+            (schedule) =>
+              schedule.status !== ScheduleStatus.INBOX &&
+              schedule.startTime &&
+              schedule.endTime,
+          )
+          .map((schedule) => ({
+            ...schedule,
+            startTime: schedule.startTime!,
+            endTime: schedule.endTime!,
+          }));
+      }
+      if (type === 'inbox') {
+        return data.filter(
+          (schedule) => schedule.status === ScheduleStatus.INBOX,
+        );
+      }
+      return data;
+    },
+    staleTime: 30 * 1000,
+    gcTime: 5 * 60 * 1000,
   });
 }
 
@@ -54,36 +79,20 @@ export function useCreateSchedule() {
 
   return useMutation({
     mutationFn: createSchedule,
-    // When mutate is called:
     onMutate: async (newSchedule) => {
-      // Cancel any outgoing refetches
       await queryClient.cancelQueries({ queryKey: scheduleKeys.lists() });
-
-      // Snapshot the previous value
       const previousSchedules = queryClient.getQueryData<Schedule[]>(
         scheduleKeys.lists(),
       );
-
-      // Optimistically update to the new value
-      queryClient.setQueryData<Schedule[]>(scheduleKeys.lists(), (old = []) => {
-        const optimisticSchedule: Schedule = {
-          ...newSchedule,
-          id: crypto.randomUUID(), // Temporary ID
-        };
-        return [...old, optimisticSchedule];
-      });
-
-      // Return a context object with the snapshotted value
       return { previousSchedules };
     },
-    // If the mutation fails, use the context returned from onMutate to roll back
     onError: (err, newSchedule, context) => {
+      console.error('Failed to create schedule:', err);
       queryClient.setQueryData(
         scheduleKeys.lists(),
         context?.previousSchedules,
       );
     },
-    // Always refetch after error or success:
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: scheduleKeys.lists() });
     },
@@ -101,23 +110,28 @@ export function useUpdateSchedule() {
         scheduleKeys.lists(),
       );
 
-      queryClient.setQueryData<Schedule[]>(scheduleKeys.lists(), (old = []) =>
-        old.map((schedule) =>
-          schedule.id === updatedSchedule.id
-            ? { ...schedule, ...updatedSchedule }
-            : schedule,
-        ),
-      );
+      if (previousSchedules) {
+        queryClient.setQueryData<Schedule[]>(
+          scheduleKeys.lists(),
+          previousSchedules.map((schedule) =>
+            schedule.id === updatedSchedule.id
+              ? { ...schedule, ...updatedSchedule }
+              : schedule,
+          ),
+        );
+      }
 
       return { previousSchedules };
     },
-    onError: (err, updatedSchedule, context) => {
-      queryClient.setQueryData(
-        scheduleKeys.lists(),
-        context?.previousSchedules,
-      );
+    onError: (_err, _updatedSchedule, context) => {
+      if (context?.previousSchedules) {
+        queryClient.setQueryData(
+          scheduleKeys.lists(),
+          context.previousSchedules,
+        );
+      }
     },
-    onSettled: () => {
+    onSettled: (_data, _error, _variables, _context) => {
       queryClient.invalidateQueries({ queryKey: scheduleKeys.lists() });
     },
   });

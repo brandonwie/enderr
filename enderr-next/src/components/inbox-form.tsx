@@ -2,6 +2,7 @@ import { useRef, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 
 import { zodResolver } from '@hookform/resolvers/zod';
+import { ScheduleStatus } from '@shared/types/schedule';
 import * as z from 'zod';
 
 import { Button } from '@/components/ui/button';
@@ -14,6 +15,8 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { useCreateSchedule } from '@/hooks/use-schedule';
+import { useToast } from '@/hooks/use-toast';
 
 // Schema for the form input values
 const inboxSchema = z.object({
@@ -29,7 +32,7 @@ const inboxSchema = z.object({
 export type InboxFormValues = z.infer<typeof inboxSchema>;
 
 interface InboxFormProps {
-  onSubmit: (data: InboxFormValues) => void;
+  onSuccess?: () => void;
   onCancel?: () => void;
 }
 
@@ -47,13 +50,22 @@ const defaultValues: InboxFormValues = {
  * - Title
  * - Description (optional)
  * - Duration (defaults to 30 minutes)
+ *
+ * @remarks
+ * Uses schedule mutation to create inbox items
+ * Displays toast messages for success/error states
  */
-export function InboxForm({ onSubmit, onCancel }: InboxFormProps) {
+export function InboxForm({ onSuccess, onCancel }: InboxFormProps) {
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
+
   const form = useForm<InboxFormValues>({
     resolver: zodResolver(inboxSchema),
     defaultValues,
   });
+
+  // Use schedule mutation
+  const { mutate: createSchedule, isPending } = useCreateSchedule();
 
   // Focus title input on mount
   useEffect(() => {
@@ -64,10 +76,43 @@ export function InboxForm({ onSubmit, onCancel }: InboxFormProps) {
     return () => clearTimeout(timeoutId);
   }, []);
 
+  const handleSubmit = (data: InboxFormValues) => {
+    createSchedule(
+      {
+        title: data.title,
+        description: data.description,
+        duration: data.duration,
+        status: ScheduleStatus.INBOX,
+        // For INBOX items, we don't set startTime and endTime
+        // They will be set when the item is dragged to calendar
+        startTime: undefined,
+        endTime: undefined,
+        participants: [], // Initialize empty participants array
+      },
+      {
+        onSuccess: () => {
+          toast({
+            title: 'Success',
+            description: 'Inbox item created successfully',
+          });
+          onSuccess?.();
+        },
+        onError: (error: unknown) => {
+          toast({
+            title: 'Error',
+            description: 'Failed to create inbox item',
+            variant: 'destructive',
+          });
+          console.error('Failed to create inbox item:', error);
+        },
+      },
+    );
+  };
+
   return (
     <Form {...form}>
       <form
-        onSubmit={form.handleSubmit(onSubmit)}
+        onSubmit={form.handleSubmit(handleSubmit)}
         className="space-y-4 px-4"
       >
         <FormField
@@ -133,11 +178,17 @@ export function InboxForm({ onSubmit, onCancel }: InboxFormProps) {
               type="button"
               variant="outline"
               onClick={onCancel}
+              disabled={isPending}
             >
               Cancel
             </Button>
           )}
-          <Button type="submit">Create</Button>
+          <Button
+            type="submit"
+            disabled={isPending}
+          >
+            {isPending ? 'Creating...' : 'Create'}
+          </Button>
         </div>
       </form>
     </Form>

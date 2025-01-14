@@ -76,9 +76,13 @@ export function ScheduleCell({
 }: ScheduleCellProps) {
   const [isOpen, setIsOpen] = useState(false);
 
+  // Ensure startTime and endTime are Date objects
+  const start = startTime instanceof Date ? startTime : new Date(startTime);
+  const end = endTime instanceof Date ? endTime : new Date(endTime);
+
   // Calculate position and height
-  const startMinutes = startTime.getHours() * 60 + startTime.getMinutes();
-  const endMinutes = endTime.getHours() * 60 + endTime.getMinutes();
+  const startMinutes = start.getHours() * 60 + start.getMinutes();
+  const endMinutes = end.getHours() * 60 + end.getMinutes();
   const height = (duration / 30) * 20; // 20px per 30min slot
   const top = (startMinutes / 30) * 20;
 
@@ -90,8 +94,8 @@ export function ScheduleCell({
       id,
       title,
       description,
-      startTime,
-      endTime,
+      startTime: start,
+      endTime: end,
       duration,
       status,
     },
@@ -129,7 +133,7 @@ export function ScheduleCell({
         >
           <h3 className="truncate text-xs font-medium">{title}</h3>
           <time className="text-[10px]">
-            {format(startTime, 'HH:mm')} - {format(endTime, 'HH:mm')}
+            {format(start, 'HH:mm')} - {format(end, 'HH:mm')}
           </time>
         </div>
       </PopoverTrigger>
@@ -139,7 +143,7 @@ export function ScheduleCell({
           defaultValues={{
             title,
             description: description || '',
-            startTime,
+            startTime: start,
             status,
             duration,
             participants: [],

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 
 import { useDroppable } from '@dnd-kit/core';
 import {
@@ -9,7 +9,7 @@ import {
 } from '@dnd-kit/sortable';
 import { DragItemType, ScheduleStatus } from '@shared/types/schedule';
 
-import { InboxForm, type InboxFormValues } from '@/components/inbox-form';
+import { InboxForm } from '@/components/inbox-form';
 import { InboxSchedule } from '@/components/inbox-schedule';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,6 +20,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useSchedules, useUpdateSchedule } from '@/hooks/use-schedule';
 import {
   addInboxItemScheduledListener,
   addInboxReorderListener,
@@ -30,19 +31,6 @@ import {
 } from '@/lib/user-event';
 
 /**
- * Represents an item in the inbox
- * @remarks These items don't have start/end times until placed on calendar
- */
-interface InboxItem {
-  id: string;
-  title: string;
-  description?: string;
-  /** Duration in minutes (default 30) */
-  duration: number;
-  status: ScheduleStatus.INBOX;
-}
-
-/**
  * Sidebar Component
  * @remarks
  * Contains:
@@ -51,15 +39,28 @@ interface InboxItem {
  * - Scrollable list of inbox items
  * - Droppable area for returning items to inbox
  * - Sortable inbox items
+ *
+ * @remarks
+ * Uses schedule data and filters for INBOX status items
  */
 export function Sidebar() {
   const [open, setOpen] = useState(false);
 
-  // State for inbox items
-  const [inboxItems, setInboxItems] = useState<InboxItem[]>([]);
+  // Fetch all schedules and filter for inbox items
+  const { data: schedules = [], isLoading } = useSchedules();
+  const { mutate: updateSchedule } = useUpdateSchedule();
 
-  // TODO: Fetch inbox items using React Query
-  // const { data: inboxItems = [], isLoading } = useInboxItems();
+  // Filter for inbox items
+  const inboxItems = useMemo(() => {
+    return schedules
+      .filter((schedule) => schedule.status === ScheduleStatus.INBOX)
+      .sort((a, b) => {
+        // Sort by last update time, newest first
+        return (
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+      });
+  }, [schedules]);
 
   // Make inbox area droppable
   const { setNodeRef } = useDroppable({
@@ -72,50 +73,37 @@ export function Sidebar() {
   // Listen for events
   useEffect(() => {
     const handleInboxItemScheduled = ({ detail }: InboxItemScheduledEvent) => {
-      const { id } = detail;
-      setInboxItems((prevItems) => prevItems.filter((item) => item.id !== id));
-
-      // TODO: Update inbox item in the backend
-      // const { mutate } = useUpdateInboxItem();
-      // mutate({ id, status: ScheduleStatus.SCHEDULED });
+      // No need to manually update state, React Query will handle cache invalidation
+      // when the mutation is successful
     };
 
     const handleScheduleToInbox = ({ detail }: ScheduleToInboxEvent) => {
-      const { id, title, description } = detail;
-      const newInboxItem: InboxItem = {
-        id,
-        title,
-        description,
-        duration: 30, // Reset to default duration
-        status: ScheduleStatus.INBOX,
-      };
-
-      // Update UI immediately
-      setInboxItems((prev) => [...prev, newInboxItem]);
-
-      // TODO: Create inbox item in the backend
-      // const { mutate } = useCreateInboxItem();
-      // mutate(newInboxItem);
+      // No need to manually update state, React Query will handle cache updates
+      // when the mutation is successful
     };
 
     const handleInboxReorder = ({ detail }: InboxReorderEvent) => {
       const { activeId, overId } = detail;
 
-      // Update UI immediately
-      setInboxItems((items) => {
-        const oldIndex = items.findIndex((item) => item.id === activeId);
-        const newIndex = items.findIndex((item) => item.id === overId);
+      // Find the items to reorder
+      const activeItem = inboxItems.find((item) => item.id === activeId);
+      const overItem = inboxItems.find((item) => item.id === overId);
 
-        const newItems = [...items];
-        const [movedItem] = newItems.splice(oldIndex, 1);
-        newItems.splice(newIndex, 0, movedItem);
+      if (!activeItem || !overItem) return;
 
-        return newItems;
-      });
-
-      // TODO: Update order in the backend
-      // const { mutate } = useUpdateInboxOrder();
-      // mutate({ activeId, overId });
+      // Update through schedule mutation
+      updateSchedule(
+        {
+          id: activeId,
+          // When moving an item, update its status to ensure it stays in INBOX
+          status: ScheduleStatus.INBOX,
+        },
+        {
+          onError: (error: unknown) => {
+            console.error('Failed to update inbox order:', error);
+          },
+        },
+      );
     };
 
     // Add event listeners
@@ -134,18 +122,7 @@ export function Sidebar() {
       removeScheduleToInboxListener();
       removeInboxReorderListener();
     };
-  }, []);
-
-  const handleCreateInboxItem = (data: InboxFormValues) => {
-    const newItem: InboxItem = {
-      id: crypto.randomUUID(),
-      ...data,
-      status: ScheduleStatus.INBOX,
-    };
-
-    setInboxItems((prev) => [...prev, newItem]);
-    setOpen(false);
-  };
+  }, [inboxItems, updateSchedule]);
 
   return (
     <aside
@@ -171,7 +148,7 @@ export function Sidebar() {
               <DialogTitle>Add Inbox Item</DialogTitle>
             </DialogHeader>
             <InboxForm
-              onSubmit={handleCreateInboxItem}
+              onSuccess={() => setOpen(false)}
               onCancel={() => setOpen(false)}
             />
           </DialogContent>
@@ -184,12 +161,22 @@ export function Sidebar() {
           strategy={verticalListSortingStrategy}
         >
           <div className="space-y-2">
-            {inboxItems.map((item) => (
-              <InboxSchedule
-                key={item.id}
-                {...item}
-              />
-            ))}
+            {isLoading ? (
+              <div className="p-4 text-center text-muted-foreground">
+                Loading...
+              </div>
+            ) : inboxItems.length === 0 ? (
+              <div className="p-4 text-center text-muted-foreground">
+                No items in inbox
+              </div>
+            ) : (
+              inboxItems.map((item) => (
+                <InboxSchedule
+                  key={item.id}
+                  {...item}
+                />
+              ))
+            )}
           </div>
         </SortableContext>
       </ScrollArea>
