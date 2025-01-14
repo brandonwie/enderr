@@ -142,7 +142,7 @@ export default function Home() {
         Number(hour),
         Number(minute) || 0,
         {
-          type: 'inbox',
+          type: DragItemType.INBOX,
           title: activeDragData.title,
           description: activeDragData.description,
           duration: activeDragData.duration || 30,
@@ -172,6 +172,7 @@ export default function Home() {
         activeDragData.description,
         startTime,
         endTime,
+        duration,
         activeDragData.status || ScheduleStatus.SCHEDULED,
       );
     }
@@ -217,6 +218,7 @@ export default function Home() {
                 startTime={activeDragData.startTime!}
                 endTime={activeDragData.endTime!}
                 status={activeDragData.status || ScheduleStatus.SCHEDULED}
+                duration={activeDragData.duration || 30}
                 isDragOverlay
               />
             )}

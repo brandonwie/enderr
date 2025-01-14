@@ -1,6 +1,9 @@
-import { Injectable, ExecutionContext } from '@nestjs/common';
+import {
+  Injectable,
+  ExecutionContext,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { Observable } from 'rxjs';
 import { ConfigService } from '@nestjs/config';
 import { CustomLogger } from '../../logger/logger.service';
 
@@ -17,25 +20,47 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     this.logger.setContext('JwtAuthGuard');
   }
 
-  canActivate(
-    context: ExecutionContext,
-  ): boolean | Promise<boolean> | Observable<boolean> {
+  canActivate(context: ExecutionContext) {
     const request = context.switchToHttp().getRequest();
+    const token = request.headers.authorization?.split(' ')[1];
+
     this.logger.debug('Authenticating request', {
       path: request.path,
       method: request.method,
-      cookies: request.cookies,
+      hasToken: !!token,
     });
 
     return super.canActivate(context);
   }
 
-  handleRequest(err: any, user: any, info: any) {
+  handleRequest(err: any, user: any, info: any, context: ExecutionContext) {
+    const request = context.switchToHttp().getRequest();
+    const token = request.headers.authorization?.split(' ')[1];
+
     if (err || !user) {
-      this.logger.warn('Authentication failed', { error: err?.message, info });
-      throw err || new Error('Unauthorized');
+      this.logger.warn('Authentication failed', {
+        error: err?.message || 'No user found',
+        info: info?.message,
+        path: request.path,
+        hasToken: !!token,
+      });
+
+      if (info?.name === 'TokenExpiredError') {
+        throw new UnauthorizedException('Token expired');
+      }
+
+      if (info?.name === 'JsonWebTokenError') {
+        throw new UnauthorizedException('Invalid token');
+      }
+
+      throw new UnauthorizedException(err?.message || 'Unauthorized');
     }
-    this.logger.debug('Authentication successful', { userId: user.id });
+
+    this.logger.debug('Authentication successful', {
+      userId: user.id,
+      path: request.path,
+    });
+
     return user;
   }
 }

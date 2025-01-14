@@ -54,23 +54,12 @@ interface InboxItem {
  */
 export function Sidebar() {
   const [open, setOpen] = useState(false);
+
   // State for inbox items
-  const [inboxItems, setInboxItems] = useState<InboxItem[]>([
-    {
-      id: crypto.randomUUID(),
-      title: 'Review Project Plan',
-      description: 'Go through Q2 project timeline and milestones',
-      duration: 60,
-      status: ScheduleStatus.INBOX,
-    },
-    {
-      id: crypto.randomUUID(),
-      title: 'Team Sync',
-      description: 'Weekly team sync meeting',
-      duration: 30,
-      status: ScheduleStatus.INBOX,
-    },
-  ]);
+  const [inboxItems, setInboxItems] = useState<InboxItem[]>([]);
+
+  // TODO: Fetch inbox items using React Query
+  // const { data: inboxItems = [], isLoading } = useInboxItems();
 
   // Make inbox area droppable
   const { setNodeRef } = useDroppable({
@@ -85,6 +74,10 @@ export function Sidebar() {
     const handleInboxItemScheduled = ({ detail }: InboxItemScheduledEvent) => {
       const { id } = detail;
       setInboxItems((prevItems) => prevItems.filter((item) => item.id !== id));
+
+      // TODO: Update inbox item in the backend
+      // const { mutate } = useUpdateInboxItem();
+      // mutate({ id, status: ScheduleStatus.SCHEDULED });
     };
 
     const handleScheduleToInbox = ({ detail }: ScheduleToInboxEvent) => {
@@ -96,12 +89,19 @@ export function Sidebar() {
         duration: 30, // Reset to default duration
         status: ScheduleStatus.INBOX,
       };
+
+      // Update UI immediately
       setInboxItems((prev) => [...prev, newInboxItem]);
+
+      // TODO: Create inbox item in the backend
+      // const { mutate } = useCreateInboxItem();
+      // mutate(newInboxItem);
     };
 
     const handleInboxReorder = ({ detail }: InboxReorderEvent) => {
       const { activeId, overId } = detail;
 
+      // Update UI immediately
       setInboxItems((items) => {
         const oldIndex = items.findIndex((item) => item.id === activeId);
         const newIndex = items.findIndex((item) => item.id === overId);
@@ -112,6 +112,10 @@ export function Sidebar() {
 
         return newItems;
       });
+
+      // TODO: Update order in the backend
+      // const { mutate } = useUpdateInboxOrder();
+      // mutate({ activeId, overId });
     };
 
     // Add event listeners
@@ -179,7 +183,7 @@ export function Sidebar() {
           items={inboxItems.map((item) => item.id)}
           strategy={verticalListSortingStrategy}
         >
-          <div className="space-y-2 pr-4">
+          <div className="space-y-2">
             {inboxItems.map((item) => (
               <InboxSchedule
                 key={item.id}

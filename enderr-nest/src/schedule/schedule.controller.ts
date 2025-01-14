@@ -9,21 +9,24 @@ import {
   UseGuards,
   NotFoundException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { User } from '../auth/decorators/user.decorator';
 import { ScheduleService } from './schedule.service';
 import { CustomLogger } from '../logger/logger.service';
-import { UserFromJwt } from 'src/auth/types/user';
+import { UserFromJwt } from '../auth/types/user';
 
 @Controller('schedules')
 @UseGuards(JwtAuthGuard)
 export class ScheduleController {
+  private readonly logger = new Logger(ScheduleController.name);
+
   constructor(
     private readonly scheduleService: ScheduleService,
-    private readonly logger: CustomLogger,
+    private readonly customLogger: CustomLogger,
   ) {
-    this.logger.setContext(ScheduleController.name);
+    this.customLogger.setContext(ScheduleController.name);
   }
 
   /**

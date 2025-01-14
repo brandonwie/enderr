@@ -31,7 +31,7 @@ export class NoteService {
         blocks: {
           create: [
             {
-              type: 'paragraph',
+              type: 'h1',
               content: initialContent || '',
               order: 0,
             },

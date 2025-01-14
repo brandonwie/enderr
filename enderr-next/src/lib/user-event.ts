@@ -41,6 +41,7 @@ export interface ScheduleUpdateDetail {
   description?: string;
   startTime: Date;
   endTime: Date;
+  duration: number;
   status: ScheduleStatus;
 }
 
@@ -137,12 +138,13 @@ export const dispatchScheduleUpdate = (
   description: string | undefined,
   startTime: Date,
   endTime: Date,
+  duration: number,
   status: ScheduleStatus,
 ) => {
   const event = new CustomEvent<ScheduleUpdateDetail>(
     USER_EVENTS.SCHEDULE_UPDATE,
     {
-      detail: { id, title, description, startTime, endTime, status },
+      detail: { id, title, description, startTime, endTime, duration, status },
       bubbles: true,
     },
   );

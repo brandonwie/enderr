@@ -178,19 +178,16 @@ export class AuthService {
    */
   private generateTokens(userId: string): JwtTokens {
     const payload = { sub: userId };
+    const SEVEN_DAYS = '7d';
 
     return {
       access_token: this.jwtService.sign(payload, {
         secret: this.configService.get<string>('JWT_SECRET'),
-        expiresIn: this.configService.get<string>(
-          'JWT_ACCESS_TOKEN_EXPIRATION',
-        ),
+        expiresIn: SEVEN_DAYS,
       }),
       refresh_token: this.jwtService.sign(payload, {
         secret: this.configService.get<string>('JWT_REFRESH_TOKEN_SECRET'),
-        expiresIn: this.configService.get<string>(
-          'JWT_REFRESH_TOKEN_EXPIRATION',
-        ),
+        expiresIn: SEVEN_DAYS,
       }),
     };
   }

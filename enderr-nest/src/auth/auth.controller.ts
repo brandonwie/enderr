@@ -4,12 +4,10 @@ import {
   Get,
   Body,
   UnauthorizedException,
-  Res,
   Logger,
   InternalServerErrorException,
   UseGuards,
 } from '@nestjs/common';
-import { Response } from 'express';
 import { IsString, IsNotEmpty } from 'class-validator';
 import { AuthService } from './auth.service';
 import { ConfigService } from '@nestjs/config';
@@ -28,6 +26,9 @@ class GoogleCredentialDto {
   credential: string;
 }
 
+/**
+ * DTO for refresh token request
+ */
 class RefreshTokenDto {
   @IsString()
   @IsNotEmpty()
@@ -41,7 +42,7 @@ interface JwtTokens {
 
 /**
  * Authentication Controller
- * @remarks Handles Google OAuth2 authentication flow and token management
+ * @remarks Handles Google OAuth2 authentication flow and JWT token management
  */
 @Controller('auth')
 export class AuthController {
@@ -56,25 +57,17 @@ export class AuthController {
   /**
    * Google Identity Services callback endpoint
    * @param dto Contains the credential JWT from Google
-   * @param res Express response object for setting cookies
+   * @returns JWT tokens for authentication
    */
   @Post('google/callback')
-  async googleCallback(
-    @Body() dto: GoogleCredentialDto,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<{ success: boolean }> {
+  async googleCallback(@Body() dto: GoogleCredentialDto): Promise<JwtTokens> {
     try {
       if (!dto.credential) {
         this.logger.error('No credential provided');
         throw new UnauthorizedException('Credential is required');
       }
 
-      const tokens = await this.authService.handleGoogleCallback(
-        dto.credential,
-      );
-      this.setAuthCookies(res, tokens);
-
-      return { success: true };
+      return await this.authService.handleGoogleCallback(dto.credential);
     } catch (error) {
       this.logger.error('Google callback failed', error.stack);
       throw new UnauthorizedException('Authentication failed');
@@ -83,93 +76,22 @@ export class AuthController {
 
   /**
    * Refresh access token using refresh token
-   * @param dto Contains refresh token from cookie
-   * @param res Express response object for setting cookies
+   * @param dto Contains refresh token
+   * @returns New JWT tokens
    */
   @Post('refresh')
-  async refreshTokens(
-    @Body() dto: RefreshTokenDto,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<{ success: boolean }> {
+  async refreshTokens(@Body() dto: RefreshTokenDto): Promise<JwtTokens> {
     try {
       if (!dto.refresh_token) {
         this.logger.warn('Token refresh attempt without refresh token');
         throw new UnauthorizedException('Refresh token is required');
       }
 
-      const tokens = await this.authService.refreshTokens(dto.refresh_token);
-      this.setAuthCookies(res, tokens);
-
-      return { success: true };
+      return await this.authService.refreshTokens(dto.refresh_token);
     } catch (error) {
       this.logger.error('Token refresh failed', error.stack);
       throw new UnauthorizedException('Invalid refresh token');
     }
-  }
-
-  /**
-   * Sign out user by clearing auth cookies
-   * @param res Express response object for clearing cookies
-   */
-  @Post('signout')
-  async signOut(
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<{ success: boolean }> {
-    try {
-      this.clearAuthCookies(res);
-      return { success: true };
-    } catch (error) {
-      this.logger.error('Sign out failed', error.stack);
-      throw new InternalServerErrorException('Sign out failed');
-    }
-  }
-
-  /**
-   * Set authentication cookies
-   * @param res Express response object
-   * @param tokens JWT tokens to set as cookies
-   */
-  private setAuthCookies(res: Response, tokens: JwtTokens): void {
-    const isDev = this.configService.get('NODE_ENV') === 'development';
-    const domain = this.configService.get('COOKIE_DOMAIN');
-
-    // Set access token cookie
-    res.cookie('access_token', tokens.access_token, {
-      httpOnly: true,
-      secure: !isDev,
-      sameSite: 'lax',
-      domain,
-      path: '/',
-      maxAge: 15 * 60 * 1000, // 15 minutes
-    });
-
-    // Set refresh token cookie
-    res.cookie('refresh_token', tokens.refresh_token, {
-      httpOnly: true,
-      secure: !isDev,
-      sameSite: 'lax',
-      domain,
-      path: '/',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
-  }
-
-  /**
-   * Clear authentication cookies
-   * @param res Express response object
-   */
-  private clearAuthCookies(res: Response): void {
-    const domain = this.configService.get('COOKIE_DOMAIN');
-
-    res.clearCookie('access_token', {
-      path: '/',
-      domain,
-    });
-
-    res.clearCookie('refresh_token', {
-      path: '/',
-      domain,
-    });
   }
 
   /**

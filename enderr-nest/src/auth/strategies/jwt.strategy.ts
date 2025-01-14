@@ -2,9 +2,9 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
-import { Request } from 'express';
 import { PrismaService } from '../../prisma.service';
 import { CustomLogger } from '../../logger/logger.service';
+import { UserFromJwt } from '../types/user';
 
 interface JwtPayload {
   sub: string;
@@ -12,7 +12,7 @@ interface JwtPayload {
 
 /**
  * JWT Strategy for Passport
- * @remarks Extracts and validates JWT tokens from cookies
+ * @remarks Extracts and validates JWT tokens from Authorization Bearer header
  */
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -23,16 +23,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private readonly prisma: PrismaService,
   ) {
     super({
-      jwtFromRequest: ExtractJwt.fromExtractors([
-        (request: Request) => {
-          const token = request?.cookies?.access_token;
-          this.logger.debug('Extracting token from cookies', {
-            token: token ? 'present' : 'missing',
-            cookies: request.cookies,
-          });
-          return token;
-        },
-      ]),
+      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
       secretOrKey: configService.get<string>('JWT_SECRET'),
     });
@@ -44,11 +35,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
    * @param payload JWT payload with user ID
    * @remarks Called by Passport after token verification
    */
-  async validate(payload: JwtPayload) {
+  async validate(payload: JwtPayload): Promise<UserFromJwt> {
     this.logger.debug('Validating JWT payload', { payload });
 
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        picture: true,
+      },
     });
 
     if (!user) {

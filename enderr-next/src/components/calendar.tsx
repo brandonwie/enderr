@@ -13,6 +13,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import { useSchedules, useCreateSchedule } from '@/hooks/use-schedule';
 import {
   InboxItemDroppedEvent,
   ScheduleDeleteEvent,
@@ -22,6 +23,7 @@ import {
   addScheduleUpdateListener,
   dispatchInboxItemScheduled,
 } from '@/lib/user-event';
+import { cn } from '@/lib/utils';
 
 // Base schedule type without ID
 interface NewSchedule {
@@ -65,9 +67,12 @@ function TimeSlot({
     <div
       ref={setNodeRef}
       data-droppable-id={id}
-      className={`h-5 transition-colors ${
-        isHalfHour ? 'border-b border-border' : ''
-      } ${isOver ? 'bg-primary/10' : ''} ${active ? 'relative z-10' : ''}`}
+      className={cn(
+        'h-5 transition-colors',
+        isHalfHour && 'border-b border-border',
+        isOver && 'bg-primary/10',
+        active && 'relative z-10',
+      )}
       onClick={onClick}
     />
   );
@@ -125,80 +130,11 @@ export function Calendar() {
 
   // State for new schedule creation
   const [newScheduleId, setNewScheduleId] = useState<string | null>(null);
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
 
-  // State for schedules
-  const [schedules, setSchedules] = useState<Schedule[]>([
-    {
-      id: crypto.randomUUID(),
-      startTime: (() => {
-        const date = new Date();
-        date.setHours(10, 0, 0, 0);
-        return date;
-      })(),
-      endTime: (() => {
-        const date = new Date();
-        date.setHours(11, 0, 0, 0);
-        return date;
-      })(),
-      title: 'Example Meeting',
-      duration: 60,
-      status: ScheduleStatus.SCHEDULED,
-    },
-  ]);
-
-  // Handle cell click for new schedule
-  const handleCellClick = (e: React.MouseEvent, date: Date, hour: number) => {
-    const id = crypto.randomUUID();
-    const startTime = new Date(date);
-    startTime.setHours(hour);
-    const endTime = new Date(startTime);
-    endTime.setMinutes(startTime.getMinutes() + 30);
-
-    // Create a temporary schedule
-    setSchedules((prev) => [
-      ...prev,
-      {
-        id,
-        title: '',
-        startTime,
-        endTime,
-        duration: 30,
-        status: ScheduleStatus.SCHEDULED,
-      },
-    ]);
-    setNewScheduleId(id);
-  };
-
-  // Handle new schedule submission
-  const handleCreateSchedule = (data: ScheduleFormValues) => {
-    // No need for date manipulation since we get Date objects directly
-    if (data.endTime <= data.startTime) {
-      // TODO: Show error toast
-      console.error('End time must be after start time');
-      return;
-    }
-
-    setSchedules((prev) =>
-      prev.map((schedule) => {
-        if (schedule.id === newScheduleId) {
-          return {
-            ...schedule,
-            ...data,
-          };
-        }
-        return schedule;
-      }),
-    );
-    setNewScheduleId(null);
-  };
-
-  // Handle new schedule cancellation
-  const handleCancelCreate = () => {
-    setSchedules((prev) =>
-      prev.filter((schedule) => schedule.id !== newScheduleId),
-    );
-    setNewScheduleId(null);
-  };
+  // Fetch schedules using React Query
+  const { data: schedules = [] } = useSchedules();
+  const { mutate: createSchedule } = useCreateSchedule();
 
   // Generate array of days for the current week
   const weekDays = useMemo(
@@ -228,7 +164,9 @@ export function Calendar() {
 
   // Listen for events
   useEffect(() => {
-    const handleInboxItemDropped = ({ detail }: InboxItemDroppedEvent) => {
+    const handleInboxItemDropped = async ({
+      detail,
+    }: InboxItemDroppedEvent) => {
       const { id, date, hour, minute, data } = detail;
 
       // Create new schedule from inbox item
@@ -237,8 +175,8 @@ export function Calendar() {
       const endTime = new Date(startTime);
       endTime.setMinutes(startTime.getMinutes() + (data.duration || 30));
 
-      const newSchedule: Schedule = {
-        id,
+      // Create a new schedule
+      const newSchedule = {
         title: data.title,
         description: data.description,
         startTime,
@@ -247,172 +185,219 @@ export function Calendar() {
         status: ScheduleStatus.SCHEDULED,
       };
 
-      setSchedules((prev) => [...prev, newSchedule]);
+      try {
+        // Create schedule in the backend with optimistic update
+        createSchedule(newSchedule);
 
-      // Notify inbox that item has been scheduled
-      dispatchInboxItemScheduled(id);
+        // Notify inbox that item has been scheduled
+        dispatchInboxItemScheduled(id);
+      } catch (error) {
+        console.error('Failed to schedule inbox item:', error);
+        // Error handling is done by React Query
+      }
     };
 
-    const handleScheduleUpdate = ({ detail }: ScheduleUpdateEvent) => {
-      const { id, title, description, startTime, endTime, status } = detail;
+    const handleScheduleUpdate = async ({ detail }: ScheduleUpdateEvent) => {
+      const { id, title, description, startTime, endTime, duration, status } =
+        detail;
 
-      setSchedules((prev) =>
-        prev.map((schedule) =>
-          schedule.id === id
-            ? {
-                ...schedule,
-                title,
-                description,
-                startTime: new Date(startTime),
-                endTime: new Date(endTime),
-                status,
-              }
-            : schedule,
-        ),
-      );
+      try {
+        // TODO: Update schedule in the backend
+        // const { mutate } = useUpdateSchedule();
+        // mutate({ id, title, description, startTime, endTime, duration, status });
+      } catch (error) {
+        console.error('Failed to update schedule:', error);
+      }
     };
 
-    const handleScheduleDelete = ({ detail }: ScheduleDeleteEvent) => {
+    const handleScheduleDelete = async ({ detail }: ScheduleDeleteEvent) => {
       const { id } = detail;
-      setSchedules((prev) => prev.filter((schedule) => schedule.id !== id));
+
+      try {
+        // TODO: Delete schedule in the backend
+        // const { mutate } = useDeleteSchedule();
+        // mutate(id);
+      } catch (error) {
+        console.error('Failed to delete schedule:', error);
+      }
     };
 
     // Add event listeners
-    const removeInboxItemDroppedListener = addInboxItemDroppedListener(
+    const removeInboxItemDropped = addInboxItemDroppedListener(
       handleInboxItemDropped,
     );
-    const removeScheduleUpdateListener =
+    const removeScheduleUpdate =
       addScheduleUpdateListener(handleScheduleUpdate);
-    const removeScheduleDeleteListener =
+    const removeScheduleDelete =
       addScheduleDeleteListener(handleScheduleDelete);
 
-    // Clean up event listeners
     return () => {
-      removeInboxItemDroppedListener();
-      removeScheduleUpdateListener();
-      removeScheduleDeleteListener();
+      removeInboxItemDropped();
+      removeScheduleUpdate();
+      removeScheduleDelete();
     };
   }, []);
 
+  // Handle cell click for new schedule
+  const handleCellClick = (e: React.MouseEvent, date: Date, hour: number) => {
+    // Store mouse position for popover
+    setMousePosition({ x: e.clientX, y: e.clientY });
+
+    const id = crypto.randomUUID();
+    const startTime = new Date(date);
+    startTime.setHours(hour, 0, 0, 0);
+    const endTime = new Date(startTime);
+    endTime.setMinutes(startTime.getMinutes() + 30);
+
+    // Create a temporary schedule
+    createSchedule({
+      title: '',
+      startTime,
+      endTime,
+      duration: 30,
+      status: ScheduleStatus.SCHEDULED,
+    });
+    setNewScheduleId(id);
+  };
+
+  // Handle new schedule submission
+  const handleCreateSchedule = (
+    data: ScheduleFormValues & { endTime: Date },
+  ) => {
+    // Update the schedule
+    createSchedule({
+      ...data,
+      // Ensure we preserve the timezone
+      startTime: new Date(data.startTime),
+      endTime: new Date(data.endTime),
+    });
+    setNewScheduleId(null);
+    setMousePosition({ x: 0, y: 0 });
+  };
+
+  // Handle new schedule cancellation
+  const handleCancelCreate = () => {
+    setNewScheduleId(null);
+    setMousePosition({ x: 0, y: 0 });
+  };
+
   return (
-    <div className="relative flex h-full flex-col overflow-hidden">
-      {/* Calendar Header */}
-      <div className="grid grid-cols-[3rem_1fr] pr-4">
-        {/* Time gutter */}
-        <div className="w-12" />
-        {/* Day columns */}
-        <div className="grid grid-cols-7">
-          {weekDays.map(({ dayName, dayNumber, isToday }, index) => (
-            <div
-              key={dayNumber}
-              className={`flex flex-col items-center justify-center p-2 ${
-                isToday ? 'bg-primary/5' : ''
-              } ${index === 0 ? 'rounded-tl-lg' : ''} ${
-                index === weekDays.length - 1 ? 'rounded-tr-lg' : ''
-              }`}
-            >
-              <div className="text-sm font-medium">{dayName}</div>
-              <div
-                className={`text-xl ${
-                  isToday ? 'text-primary' : 'text-muted-foreground'
-                }`}
-              >
-                {dayNumber}
-              </div>
-            </div>
-          ))}
-        </div>
+    <div className="relative flex h-full flex-col">
+      {/* Header */}
+      <div className="grid grid-cols-[auto_repeat(7,1fr)] border-b">
+        {/* Time column header */}
+        <div className="w-16 border-r" />
+
+        {/* Day columns headers */}
+        {weekDays.map(({ dayName, dayNumber, isToday }) => (
+          <div
+            key={dayNumber}
+            className={cn(
+              'border-r py-2 text-center',
+              isToday && 'bg-primary/5',
+            )}
+          >
+            <div className="text-sm font-medium">{dayName}</div>
+            <div className="text-xs text-muted-foreground">{dayNumber}</div>
+          </div>
+        ))}
       </div>
 
-      {/* Calendar Body */}
-      <div className="relative flex flex-1 overflow-auto pt-4">
-        {/* Time Labels */}
-        <div className="sticky left-0 z-30 w-12 bg-background">
-          {timeSlots.map(({ hour, label }) => (
-            <div
-              key={hour}
-              className="relative h-10 text-xs text-muted-foreground"
-            >
-              <span className="absolute -top-2.5 right-4">{label}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* Time Grid */}
-        <div className="relative flex flex-1">
-          <div className="grid flex-1 grid-cols-7 divide-x divide-border">
-            {weekDays.map((day) => (
+      {/* Time grid */}
+      <div className="relative flex-1 overflow-y-auto">
+        <div className="grid grid-cols-[auto_repeat(7,1fr)]">
+          {/* Time labels */}
+          <div className="w-16 border-r">
+            {timeSlots.map(({ hour, label }) => (
               <div
-                key={day.date.toISOString()}
-                className="relative"
-                style={{ minHeight: 'fit-content' }}
+                key={hour}
+                className="relative h-10"
               >
-                {/* Add CurrentTimeIndicator only for today's column */}
-                {day.isToday && <CurrentTimeIndicator />}
-
-                {/* Time Slots */}
-                {timeSlots.map((slot) => (
-                  <div
-                    key={slot.hour}
-                    className="border-border"
-                  >
-                    {/* Upper half (XX:00) */}
-                    <TimeSlot
-                      id={`${day.date.getTime()}-${slot.hour}-0`}
-                      onClick={(e) => handleCellClick(e, day.date, slot.hour)}
-                      isHalfHour={false}
-                    />
-                    {/* Lower half (XX:30) */}
-                    <TimeSlot
-                      id={`${day.date.getTime()}-${slot.hour}-30`}
-                      onClick={(e) => handleCellClick(e, day.date, slot.hour)}
-                      isHalfHour={true}
-                    />
-                  </div>
-                ))}
-
-                {/* Render schedules for this day */}
-                {schedules
-                  .filter((schedule) => isSameDay(schedule.startTime, day.date))
-                  .map((schedule) => (
-                    <ScheduleCell
-                      key={schedule.id}
-                      {...schedule}
-                    />
-                  ))}
+                <div className="absolute -top-2.5 right-2 text-xs text-muted-foreground">
+                  {label}
+                </div>
               </div>
             ))}
           </div>
+
+          {/* Day columns */}
+          {weekDays.map(({ date }) => (
+            <div
+              key={date.toISOString()}
+              className="relative border-r"
+            >
+              {/* Time slots */}
+              {timeSlots.map(({ hour }) => (
+                <div key={hour}>
+                  <TimeSlot
+                    id={`${date.toISOString()}-${hour}-0`}
+                    onClick={(e) => handleCellClick(e, date, hour)}
+                    isHalfHour={false}
+                  />
+                  <TimeSlot
+                    id={`${date.toISOString()}-${hour}-30`}
+                    onClick={(e) => handleCellClick(e, date, hour)}
+                    isHalfHour={true}
+                  />
+                </div>
+              ))}
+
+              {/* Schedule items */}
+              {schedules
+                .filter((schedule) => isSameDay(schedule.startTime, date))
+                .map((schedule) => (
+                  <ScheduleCell
+                    key={schedule.id}
+                    {...schedule}
+                  />
+                ))}
+            </div>
+          ))}
+
+          {/* Current time indicator */}
+          <CurrentTimeIndicator />
         </div>
       </div>
 
-      {/* New Schedule Popover */}
-      <Popover
-        open={newScheduleId !== null}
-        onOpenChange={(open) => !open && handleCancelCreate()}
-      >
-        <PopoverTrigger className="hidden" />
-        <PopoverContent className="w-80">
-          <div className="max-h-[calc(100vh-4rem)] overflow-y-auto">
+      {/* New schedule popover */}
+      {newScheduleId && (
+        <Popover
+          open={true}
+          onOpenChange={(open) => !open && handleCancelCreate()}
+        >
+          <PopoverTrigger asChild>
+            <div
+              style={{
+                position: 'fixed',
+                left: mousePosition.x,
+                top: mousePosition.y,
+                width: 1,
+                height: 1,
+              }}
+            />
+          </PopoverTrigger>
+          <PopoverContent
+            className="w-80"
+            side="right"
+            align="start"
+            sideOffset={8}
+          >
             <ScheduleForm
               mode="create"
               defaultValues={{
                 title: '',
-                status: ScheduleStatus.SCHEDULED,
-                duration: 30,
+                description: '',
                 startTime:
                   schedules.find((s) => s.id === newScheduleId)?.startTime ||
                   new Date(),
-                endTime:
-                  schedules.find((s) => s.id === newScheduleId)?.endTime ||
-                  addMinutes(new Date(), 30),
+                duration: 30,
+                status: ScheduleStatus.SCHEDULED,
+                participants: [],
               }}
-              onSubmit={handleCreateSchedule}
-              onCancel={handleCancelCreate}
             />
-          </div>
-        </PopoverContent>
-      </Popover>
+          </PopoverContent>
+        </Popover>
+      )}
     </div>
   );
 }

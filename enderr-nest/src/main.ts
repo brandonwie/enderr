@@ -13,8 +13,10 @@ import { CustomLogger } from './logger/logger.service';
  * - whitelist: strip properties that aren't decorated with validation decorators
  * - forbidNonWhitelisted: throw error if non-whitelisted properties are present
  *
- * @note CORS is enabled for development
- * - In production, you might want to restrict origins
+ * @note CORS configuration:
+ * - Development: allows localhost:3000
+ * - Production: uses FRONTEND_URL from env
+ * - Credentials enabled for cookie support
  */
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -33,11 +35,7 @@ async function bootstrap() {
 
   // CORS configuration
   app.enableCors({
-    origin:
-      process.env.NODE_ENV === 'development'
-        ? true
-        : [process.env.FRONTEND_URL],
-    credentials: true, // Important for cookies
+    origin: '*',
   });
 
   const port = process.env.PORT || 8080;

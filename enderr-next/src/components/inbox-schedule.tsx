@@ -1,73 +1,77 @@
+'use client';
+
+import { useRouter } from 'next/navigation';
+
 import { useDraggable } from '@dnd-kit/core';
-import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { DragItemType, ScheduleStatus } from '@shared/types/schedule';
+import { DragItemType } from '@shared/types/schedule';
 
 interface InboxScheduleProps {
   id: string;
   title: string;
   description?: string;
   duration: number;
-  isDragOverlay?: boolean;
+  isDragging?: boolean;
 }
 
 /**
  * InboxSchedule Component
  * @remarks
- * Draggable schedule item in the inbox
- * Can be:
- * 1. Dragged to calendar to create a new schedule
- * 2. Reordered within the inbox
+ * Represents a schedule item in the inbox
+ * - Draggable to calendar grid
+ * - Shows title and duration
+ * - Navigates to detail page on click
  */
 export function InboxSchedule({
   id,
   title,
   description,
   duration,
-  isDragOverlay,
+  isDragging,
 }: InboxScheduleProps) {
+  const router = useRouter();
   const {
     attributes,
     listeners,
     setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({
+    isDragging: isDraggingItem,
+  } = useDraggable({
     id,
     data: {
       type: DragItemType.INBOX,
+      id,
       title,
       description,
       duration,
-      sortable: true,
     },
   });
 
   const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
+    transform: CSS.Transform.toString(
+      isDragging ? { x: 0, y: 0, scaleX: 1, scaleY: 1 } : null,
+    ),
   };
 
   return (
     <div
       ref={setNodeRef}
-      style={style}
       {...attributes}
       {...listeners}
-      className={`group relative rounded-md border bg-card p-3 shadow-sm transition-colors hover:border-primary/50 ${
-        isDragging ? 'z-10 opacity-50' : ''
-      } ${isDragOverlay ? 'shadow-md' : ''}`}
+      className={`flex cursor-move items-center gap-2 rounded-md border bg-card p-2 text-card-foreground hover:bg-accent hover:text-accent-foreground ${
+        isDraggingItem ? 'opacity-50' : ''
+      }`}
+      style={style}
+      onClick={(e) => {
+        // Only navigate if not dragging
+        if (!isDraggingItem) {
+          e.preventDefault();
+          e.stopPropagation();
+          router.push(`/inbox/${id}`);
+        }
+      }}
     >
-      <div className="mb-1 flex items-center justify-between gap-2">
-        <h3 className="font-medium">{title}</h3>
-        <span className="text-xs text-muted-foreground">{duration}m</span>
-      </div>
-      {description && (
-        <p className="line-clamp-2 text-sm text-muted-foreground">
-          {description}
-        </p>
-      )}
+      <div className="flex-1 truncate text-sm">{title}</div>
+      <div className="text-xs text-muted-foreground">{duration}m</div>
     </div>
   );
 }
