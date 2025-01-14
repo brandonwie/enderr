@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { DynamoDBService } from '../dynamodb.service';
-import { BlockOperation, NoteOperationBatch } from '@shared/types/note';
+import { NoteOperationBatch } from '@shared/types/note';
 
 const MAX_OPERATIONS_PER_BATCH = 50;
 
@@ -215,7 +215,7 @@ export class NoteService {
         },
         creator: true,
         collaborators: true,
-        schedules: true,
+        schedule: true,
       },
     });
 

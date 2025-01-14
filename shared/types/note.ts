@@ -18,7 +18,7 @@ export interface NoteBlock {
 
 /**
  * Represents a note in the system
- * @remarks Notes can be attached to schedules and edited concurrently by multiple users
+ * @remarks Notes can be attached to a schedule and edited concurrently by multiple users
  */
 export interface Note {
   /** Unique identifier for the note */
@@ -27,8 +27,8 @@ export interface Note {
   title: string;
   /** Blocks of content */
   blocks: NoteBlock[];
-  /** Schedules this note is attached to */
-  schedules?: Schedule[];
+  /** Schedule this note is attached to */
+  schedule?: Schedule;
   /** Creator of the note */
   creator: UserBasicInfo;
   /** Users who have access to edit this note */

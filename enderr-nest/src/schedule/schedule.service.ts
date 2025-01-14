@@ -26,7 +26,7 @@ export class ScheduleService {
       include: {
         creator: true,
         participants: true,
-        notes: true,
+        note: true,
       },
       orderBy: { startTime: 'asc' },
     });
@@ -41,7 +41,7 @@ export class ScheduleService {
       include: {
         creator: true,
         participants: true,
-        notes: true,
+        note: true,
       },
     });
   }
@@ -70,7 +70,7 @@ export class ScheduleService {
       include: {
         creator: true,
         participants: true,
-        notes: true,
+        note: true,
       },
     });
 
@@ -117,7 +117,7 @@ export class ScheduleService {
       include: {
         creator: true,
         participants: true,
-        notes: true,
+        note: true,
       },
     });
 

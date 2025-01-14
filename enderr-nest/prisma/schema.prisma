@@ -49,7 +49,7 @@ model Schedule {
   creator     User         @relation("CreatedSchedules", fields: [creatorId], references: [id])
   creatorId   String
   participants User[]      @relation("ParticipatingSchedules")
-  notes       Note[]
+  note        Note?
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
@@ -65,7 +65,8 @@ model Note {
   creator      User       @relation("CreatedNotes", fields: [creatorId], references: [id])
   creatorId    String
   collaborators User[]    @relation("CollaboratingNotes")
-  schedules    Schedule[]
+  schedule     Schedule?  @relation(fields: [scheduleId], references: [id])
+  scheduleId   String?    @unique
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
