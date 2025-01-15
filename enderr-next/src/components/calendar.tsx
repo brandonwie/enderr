@@ -58,31 +58,41 @@ function TimeSlot({
   id,
   onClick,
   isHalfHour,
-  isDisabled,
 }: {
   id: string;
   onClick: (e: React.MouseEvent) => void;
   isHalfHour: boolean;
-  isDisabled?: boolean;
 }) {
   // Make this element a drop target
   const { setNodeRef, isOver, active } = useDroppable({
     id,
+    data: {
+      type: 'cell',
+      id,
+    },
   });
+
+  // Only log when being dragged over
+  useEffect(() => {
+    if (isOver) {
+      console.log('🎯 Drop target active:', {
+        id,
+        hasActiveItem: !!active,
+      });
+    }
+  }, [isOver, id, active]);
 
   return (
     <div
       ref={setNodeRef}
       data-droppable-id={id}
       className={cn(
-        'h-5 transition-colors',
-        !isDisabled && 'hover:bg-primary/5',
+        'h-5 transition-colors hover:bg-primary/5',
         isHalfHour && 'border-b border-border',
         isOver && 'bg-primary/10',
         active && 'relative z-10',
-        isDisabled && 'cursor-not-allowed bg-muted/5',
       )}
-      onClick={isDisabled ? undefined : onClick}
+      onClick={onClick}
     />
   );
 }
@@ -92,8 +102,7 @@ function TimeSlot({
  * @remarks
  * Shows the current time as a line across the calendar
  * Updates every minute
- * Includes a circle on the left border
- * Only shows in today's column
+ * Includes a circle on the left border * Only shows in today's column
  */
 function CurrentTimeIndicator({
   weekDays,
@@ -349,10 +358,18 @@ export function Calendar() {
                   return (
                     <div
                       key={hour}
-                      className="h-10 bg-muted/10"
+                      className="h-10"
                     >
-                      <div className="h-5" />
-                      <div className="h-5 border-b border-border" />
+                      <TimeSlot
+                        id={`${date.toISOString()}-${hour}-0`}
+                        onClick={(e) => handleCellClick(e, date, hour)}
+                        isHalfHour={false}
+                      />
+                      <TimeSlot
+                        id={`${date.toISOString()}-${hour}-30`}
+                        onClick={(e) => handleCellClick(e, date, hour)}
+                        isHalfHour={true}
+                      />
                     </div>
                   );
                 }
@@ -363,13 +380,11 @@ export function Calendar() {
                       id={`${date.toISOString()}-${hour}-0`}
                       onClick={(e) => handleCellClick(e, date, hour)}
                       isHalfHour={false}
-                      isDisabled={isCurrentHour && now.getMinutes() >= 0}
                     />
                     <TimeSlot
                       id={`${date.toISOString()}-${hour}-30`}
                       onClick={(e) => handleCellClick(e, date, hour)}
                       isHalfHour={true}
-                      isDisabled={isCurrentHour && now.getMinutes() >= 30}
                     />
                   </div>
                 );
