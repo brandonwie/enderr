@@ -14,8 +14,9 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { USER_EVENTS } from '@/lib/user-event';
+import { dispatchScheduleUpdate } from '@/lib/user-event';
 import { cn } from '@/lib/utils';
+import { useScheduleStore } from '@/stores/use-schedule-store';
 
 interface ScheduleCellProps {
   id: string;
@@ -75,6 +76,7 @@ export function ScheduleCell({
   isDragOverlay,
 }: ScheduleCellProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const updateSchedule = useScheduleStore((state) => state.updateSchedule);
 
   // Ensure startTime and endTime are Date objects
   const start = startTime instanceof Date ? startTime : new Date(startTime);
@@ -107,6 +109,38 @@ export function ScheduleCell({
       setIsOpen(false);
     }
   }, [isDragging, isOpen]);
+
+  const handleUpdate = async (data: ScheduleFormValues) => {
+    try {
+      // Close popover first for better UX
+      setIsOpen(false);
+
+      // Update schedule using store action
+      await updateSchedule(id, {
+        title: data.title,
+        description: data.description,
+        startTime: data.startTime,
+        endTime: data.endTime,
+        duration: data.duration,
+        status: data.status,
+      });
+
+      // Dispatch update event for any listeners
+      dispatchScheduleUpdate(
+        id,
+        data.title,
+        data.description,
+        data.startTime,
+        data.endTime,
+        data.duration,
+        data.status,
+      );
+    } catch (error) {
+      console.error('Failed to update schedule:', error);
+      // Reopen popover on error
+      setIsOpen(true);
+    }
+  };
 
   return (
     <Popover
@@ -141,13 +175,16 @@ export function ScheduleCell({
         <ScheduleForm
           mode="edit"
           defaultValues={{
+            id,
             title,
             description: description || '',
             startTime: start,
+            endTime: end,
             status,
             duration,
             participants: [],
           }}
+          onSubmit={handleUpdate}
         />
       </PopoverContent>
     </Popover>

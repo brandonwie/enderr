@@ -20,7 +20,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useSchedules, useUpdateSchedule } from '@/hooks/use-schedule';
+import { useGetSchedules, useUpdateSchedule } from '@/hooks/use-schedule';
 import {
   addInboxItemScheduledListener,
   addInboxReorderListener,
@@ -47,7 +47,7 @@ export function Sidebar() {
   const [open, setOpen] = useState(false);
 
   // Fetch all schedules and filter for inbox items
-  const { data: schedules = [], isLoading } = useSchedules();
+  const { data: schedules = [], isLoading } = useGetSchedules();
   const { mutate: updateSchedule } = useUpdateSchedule();
 
   // Filter for inbox items

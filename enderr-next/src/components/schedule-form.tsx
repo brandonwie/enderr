@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -26,8 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useCreateSchedule, useUpdateSchedule } from '@/hooks/use-schedule';
-import { API_ENDPOINTS, apiClient } from '@/lib/api-client';
+import { useScheduleStore } from '@/stores/use-schedule-store';
 
 // Base schema that both create and edit will use
 const baseScheduleSchema = {
@@ -80,6 +79,7 @@ export type EditScheduleValues = z.infer<typeof editScheduleSchema>;
 export type ScheduleFormValues = CreateScheduleValues | EditScheduleValues;
 
 type DefaultValues = {
+  id?: string; // Optional ID for edit mode
   title?: string;
   description?: string;
   startTime?: Date;
@@ -97,7 +97,6 @@ type DefaultValues = {
 interface ScheduleFormProps {
   defaultValues: DefaultValues;
   onCancel?: () => void;
-  onDelete?: () => void;
   onSubmit?: (data: ScheduleFormValues & { endTime: Date }) => void;
   mode: 'create' | 'edit';
 }
@@ -109,127 +108,75 @@ interface ScheduleFormProps {
  * Uses different validation schemas based on mode
  * Provides different actions based on mode (create/cancel vs save/delete)
  *
- * Handles two cases for time management:
- * 1. When endTime is provided in defaultValues, calculates initial duration
- * 2. When endTime is not provided, calculates it from startTime and duration
+ * @param defaultValues - Initial values for the form. In edit mode, must include id
+ * @param onCancel - Optional callback for cancel button click
+ * @param onSubmit - Optional callback for form submission
+ * @param mode - 'create' or 'edit' mode
  */
 export function ScheduleForm({
   defaultValues,
   onCancel,
-  onDelete,
   onSubmit,
   mode,
 }: ScheduleFormProps) {
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const deleteSchedule = useScheduleStore((state) => state.deleteSchedule);
 
-  // Initialize form with default values
+  // Focus title input on mount
+  useEffect(() => {
+    if (titleInputRef.current) {
+      titleInputRef.current.focus();
+    }
+  }, []);
+
   const form = useForm<ScheduleFormValues>({
     resolver: zodResolver(
       mode === 'create' ? createScheduleSchema : editScheduleSchema,
     ),
     defaultValues: {
-      title: defaultValues.title || '',
-      description: defaultValues.description || '',
+      ...defaultValues,
+      // Ensure startTime is a Date
       startTime: defaultValues.startTime || new Date(),
-      endTime: addMinutes(
-        defaultValues.startTime || new Date(),
-        defaultValues.duration || 30,
-      ),
-      status: defaultValues.status || ScheduleStatus.SCHEDULED,
-      duration: defaultValues.duration || 30,
-      participants: defaultValues.participants || [],
+      endTime: defaultValues.startTime
+        ? addMinutes(defaultValues.startTime, defaultValues.duration || 30)
+        : addMinutes(new Date(), defaultValues.duration || 30),
     },
   });
 
-  // Focus title input on mount if in create mode
+  // Watch for changes to recalculate end time
   useEffect(() => {
-    if (mode === 'create') {
-      const timeoutId = setTimeout(() => {
-        titleInputRef.current?.focus();
-      }, 50);
-      return () => clearTimeout(timeoutId);
-    }
-  }, [mode]);
+    const subscription = form.watch((value, { name }) => {
+      if (name === 'startTime' || name === 'duration') {
+        const startTime = value.startTime as Date;
+        const duration = (value.duration as number) || 30;
+        if (startTime) {
+          form.setValue('endTime', addMinutes(startTime, duration));
+        }
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [form]);
 
-  // Update endTime whenever startTime or duration changes
-  useEffect(() => {
-    const startTime = form.watch('startTime');
-    const duration = form.watch('duration');
-
-    if (startTime && duration) {
-      console.log('Updating endTime with:', { startTime, duration });
-      const newEndTime = addMinutes(startTime, duration);
-      console.log('New endTime:', newEndTime);
-      form.setValue('endTime', newEndTime);
-    }
-  }, [form.watch('startTime'), form.watch('duration'), form]);
-
-  const { mutate: createSchedule, isPending: isCreating } = useCreateSchedule();
-  const { mutate: updateSchedule, isPending: isUpdating } = useUpdateSchedule();
-
-  // Type guard to check if data is EditScheduleValues
-  const isEditScheduleValues = (
-    data: ScheduleFormValues,
-  ): data is EditScheduleValues => {
-    return 'id' in data && 'participants' in data;
-  };
-
-  // Handle form submission with calculated endTime
   const handleFormSubmit = async (data: ScheduleFormValues) => {
-    console.log('Form submitted with data:', data);
-
-    const scheduleData = {
-      ...data,
-      // Only include participants if in edit mode and they exist
-      ...(isEditScheduleValues(data) && data.participants
-        ? {
-            participants: data.participants.map((p) => ({
-              id: p.id,
-              name: p.name,
-              email: p.email,
-              picture: p.picture,
-            })),
-          }
-        : {}),
-    };
-
-    try {
-      if (onSubmit) {
-        console.log('Calling parent onSubmit with data:', scheduleData);
-        onSubmit(scheduleData);
-        return;
-      }
-
-      // If no onSubmit prop, use apiClient
-      if (mode === 'create') {
-        console.log('Creating schedule with data:', scheduleData);
-        const response = await apiClient.post(
-          API_ENDPOINTS.schedules.create(),
-          scheduleData,
-        );
-
-        if (!response.data) {
-          throw new Error('Failed to create schedule');
-        }
-      } else {
-        const response = await apiClient.patch(
-          API_ENDPOINTS.schedules.update((data as EditScheduleValues).id),
-          scheduleData,
-        );
-
-        if (!response.data) {
-          throw new Error('Failed to update schedule');
-        }
-      }
-
-      // Reload the page to refresh data
-      window.location.reload();
-    } catch (error) {
-      console.error('Failed to submit schedule:', error);
+    if (onSubmit) {
+      onSubmit({
+        ...data,
+        endTime: addMinutes(data.startTime, data.duration),
+      });
     }
   };
 
-  const isPending = isCreating || isUpdating;
+  const handleDelete = async () => {
+    console.log('delete', defaultValues);
+    console.log('mode', mode);
+    try {
+      if (mode === 'edit' && defaultValues.id) {
+        await deleteSchedule(defaultValues.id);
+      }
+    } catch (error) {
+      console.error('Failed to delete schedule:', error);
+    }
+  };
 
   return (
     <Form {...form}>
@@ -358,17 +305,11 @@ export function ScheduleForm({
               <Button
                 type="button"
                 variant="destructive"
-                onClick={onDelete}
-                disabled={isPending}
+                onClick={handleDelete}
               >
                 Delete
               </Button>
-              <Button
-                type="submit"
-                disabled={isPending}
-              >
-                {isPending ? 'Saving...' : 'Save'}
-              </Button>
+              <Button type="submit">Save</Button>
             </>
           ) : (
             <>
@@ -377,17 +318,11 @@ export function ScheduleForm({
                   type="button"
                   variant="outline"
                   onClick={onCancel}
-                  disabled={isPending}
                 >
                   Cancel
                 </Button>
               )}
-              <Button
-                type="submit"
-                disabled={isPending}
-              >
-                {isPending ? 'Creating...' : 'Create'}
-              </Button>
+              <Button type="submit">Create</Button>
             </>
           )}
         </div>

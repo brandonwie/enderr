@@ -6,15 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { ThemeProvider } from '@/components/theme-provider';
 import { AuthProvider } from '@/contexts/auth-context';
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 1,
-      refetchOnWindowFocus: false,
-    },
-  },
-});
+import { queryClient } from '@/lib/react-query';
 
 /**
  * Root Provider Component

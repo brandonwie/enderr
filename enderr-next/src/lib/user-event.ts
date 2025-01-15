@@ -39,8 +39,8 @@ export interface ScheduleUpdateDetail {
   id: string;
   title: string;
   description?: string;
-  startTime: Date;
-  endTime: Date;
+  startTime?: Date;
+  endTime?: Date;
   duration: number;
   status: ScheduleStatus;
 }
@@ -136,8 +136,8 @@ export const dispatchScheduleUpdate = (
   id: string,
   title: string,
   description: string | undefined,
-  startTime: Date,
-  endTime: Date,
+  startTime: Date | undefined,
+  endTime: Date | undefined,
   duration: number,
   status: ScheduleStatus,
 ) => {

@@ -13,6 +13,7 @@ import {
   useSensors,
   pointerWithin,
 } from '@dnd-kit/core';
+import type { Modifier } from '@dnd-kit/core';
 import { DragItemType, ScheduleStatus } from '@shared/types/schedule';
 
 import { Calendar } from '@/components/calendar';
@@ -26,6 +27,7 @@ import {
   dispatchScheduleToInbox,
   dispatchScheduleUpdate,
 } from '@/lib/user-event';
+import { useScheduleStore } from '@/stores/use-schedule-store';
 
 /**
  * Interface for drag and drop data
@@ -84,16 +86,57 @@ export default function Home() {
     }
   };
 
+  // Adjust the drag overlay position to follow the cursor
+  const adjustTranslate: Modifier = ({ transform }) => {
+    return {
+      ...transform,
+      y: transform.y - 20, // Move overlay up by 20px to center with cursor
+    };
+  };
+
   // Handle drag end and item drops
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
+    setActiveId(null);
+    setActiveDragData(null);
+
+    if (!over) return;
+
+    const activeDragData = active.data.current as DragData;
+    const isInboxDropArea = over.id === 'inbox';
+
+    if (activeDragData.type === DragItemType.SCHEDULE) {
+      if (isInboxDropArea) {
+        try {
+          // Convert schedule to inbox item
+          await useScheduleStore
+            .getState()
+            .updateSchedule(active.id as string, {
+              startTime: undefined,
+              endTime: undefined,
+              duration: activeDragData.duration || 30,
+              status: ScheduleStatus.INBOX,
+            });
+        } catch (error) {
+          console.error('Failed to convert schedule to inbox item:', error);
+        }
+        return;
+      }
+    }
+
+    // Get drop target info
+    const dropTargetInfo = (over.id as string).split('_');
+    const [cellId, dropDate, dropHour, dropMinute] = dropTargetInfo;
 
     // If not dropped on a valid target, cancel the operation
-    if (!over?.id || typeof over.id !== 'string') {
-      setActiveId(null);
-      setActiveDragData(null);
+    if (!dropDate || isNaN(Number(dropHour))) {
       return;
     }
+
+    // Parse the drop target ID to get date and time
+    const targetDate = new Date(dropDate);
+    const targetHour = Number(dropHour);
+    const targetMinute = Number(dropMinute) || 0;
 
     // Handle inbox item reordering
     if (
@@ -106,41 +149,13 @@ export default function Home() {
       return;
     }
 
-    // Handle dropping into inbox area
-    if (over.id === 'inbox' && activeDragData?.type === DragItemType.SCHEDULE) {
-      // First, convert schedule to inbox item
-      dispatchScheduleToInbox(
-        active.id as string,
-        activeDragData.title,
-        activeDragData.description,
-      );
-
-      // Then, delete the schedule from calendar
-      dispatchScheduleDelete(active.id as string);
-
-      setActiveId(null);
-      setActiveDragData(null);
-      return;
-    }
-
-    // Parse the drop target ID to get date and time
-    // Format: "timestamp-hour-minute" (e.g., "1673827200000-9-30" for 9:30 on some date)
-    const [dateStr, hour, minute] = over.id.split('-');
-    const date = new Date(Number(dateStr));
-
-    if (!date || isNaN(Number(hour))) {
-      setActiveId(null);
-      setActiveDragData(null);
-      return;
-    }
-
     // Emit event for calendar to handle the drop
     if (activeDragData?.type === DragItemType.INBOX) {
       dispatchInboxItemDropped(
         active.id as string,
-        date,
-        Number(hour),
-        Number(minute) || 0,
+        targetDate,
+        targetHour,
+        targetMinute,
         {
           type: DragItemType.INBOX,
           title: activeDragData.title,
@@ -160,21 +175,22 @@ export default function Home() {
         60000;
 
       // Create new start and end times
-      const startTime = new Date(date);
-      startTime.setHours(Number(hour), Number(minute) || 0, 0, 0);
+      const startTime = new Date(targetDate);
+      startTime.setHours(targetHour, targetMinute, 0, 0);
       const endTime = new Date(startTime);
       endTime.setMinutes(startTime.getMinutes() + duration);
 
-      // Emit event to update schedule
-      dispatchScheduleUpdate(
-        active.id as string,
-        activeDragData.title,
-        activeDragData.description,
-        startTime,
-        endTime,
-        duration,
-        activeDragData.status || ScheduleStatus.SCHEDULED,
-      );
+      try {
+        // Update schedule using store action
+        await useScheduleStore.getState().updateSchedule(active.id as string, {
+          startTime,
+          endTime,
+          duration,
+          status: activeDragData.status || ScheduleStatus.SCHEDULED,
+        });
+      } catch (error) {
+        console.error('Failed to update schedule position:', error);
+      }
     }
 
     setActiveId(null);
@@ -188,6 +204,7 @@ export default function Home() {
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
       collisionDetection={pointerWithin}
+      modifiers={[adjustTranslate]}
     >
       <main className="grid h-[calc(100vh-3.5rem)] grid-cols-[256px_1fr]">
         <Sidebar />

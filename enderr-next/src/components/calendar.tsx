@@ -1,20 +1,20 @@
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { useDroppable } from '@dnd-kit/core';
 import { ScheduleStatus } from '@shared/types/schedule';
 import { addDays, addMinutes, format, isSameDay, startOfWeek } from 'date-fns';
 
+import { useScheduleActions } from '@/components/schedule-actions';
 import { ScheduleCell } from '@/components/schedule-cell';
-import { ScheduleForm, ScheduleFormValues } from '@/components/schedule-form';
+import { ScheduleForm } from '@/components/schedule-form';
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { useSchedules, useCreateSchedule } from '@/hooks/use-schedule';
-import { apiClient, API_ENDPOINTS } from '@/lib/api-client';
+import { useGetSchedules } from '@/hooks/use-schedule';
 import {
   InboxItemDroppedEvent,
   ScheduleDeleteEvent,
@@ -25,6 +25,7 @@ import {
   dispatchInboxItemScheduled,
 } from '@/lib/user-event';
 import { cn } from '@/lib/utils';
+import { useScheduleStore } from '@/stores/use-schedule-store';
 
 // Base schedule type without ID
 interface NewSchedule {
@@ -57,10 +58,12 @@ function TimeSlot({
   id,
   onClick,
   isHalfHour,
+  isDisabled,
 }: {
   id: string;
   onClick: (e: React.MouseEvent) => void;
   isHalfHour: boolean;
+  isDisabled?: boolean;
 }) {
   // Make this element a drop target
   const { setNodeRef, isOver, active } = useDroppable({
@@ -72,12 +75,14 @@ function TimeSlot({
       ref={setNodeRef}
       data-droppable-id={id}
       className={cn(
-        'h-5 transition-colors hover:bg-primary/5',
+        'h-5 transition-colors',
+        !isDisabled && 'hover:bg-primary/5',
         isHalfHour && 'border-b border-border',
         isOver && 'bg-primary/10',
         active && 'relative z-10',
+        isDisabled && 'cursor-not-allowed bg-muted/5',
       )}
-      onClick={onClick}
+      onClick={isDisabled ? undefined : onClick}
     />
   );
 }
@@ -88,8 +93,13 @@ function TimeSlot({
  * Shows the current time as a line across the calendar
  * Updates every minute
  * Includes a circle on the left border
+ * Only shows in today's column
  */
-function CurrentTimeIndicator() {
+function CurrentTimeIndicator({
+  weekDays,
+}: {
+  weekDays: Array<{ date: Date }>;
+}) {
   const [now, setNow] = useState(new Date());
 
   // Update current time every minute
@@ -105,10 +115,25 @@ function CurrentTimeIndicator() {
   const minutes = now.getHours() * 60 + now.getMinutes();
   const top = (minutes / 30) * 20; // 20px per 30min slot
 
+  // Calculate left position based on today's column index
+  const todayIndex = weekDays.findIndex((day) => isSameDay(day.date, now));
+  // Account for the time label column (w-16) in left position calculation
+  const left =
+    todayIndex >= 0
+      ? `calc(64px + (${todayIndex} * (100% - 64px) / 5))`
+      : '64px';
+  const width = `calc((100% - 64px) / 5)`;
+
+  if (todayIndex === -1) return null;
+
   return (
     <div
-      className="pointer-events-none absolute left-0 right-0 z-50"
-      style={{ top: `${top}px` }}
+      className="pointer-events-none absolute z-50"
+      style={{
+        top: `${top}px`,
+        left,
+        width,
+      }}
     >
       {/* Circle on the left */}
       <div className="absolute -left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-red-500" />
@@ -132,28 +157,36 @@ export function Calendar() {
   const today = useMemo(() => new Date(), []);
   const weekStart = startOfWeek(today);
 
-  // State for new schedule creation
-  const [newScheduleId, setNewScheduleId] = useState<string | null>(null);
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
-  const [tempSchedule, setTempSchedule] = useState<{
-    id: string;
-    title: string;
-    startTime: Date;
-    endTime: Date;
-    duration: number;
-    status: ScheduleStatus;
-    description?: string;
-  } | null>(null);
+  // Use schedule actions hook instead of local state
+  const {
+    tempSchedule,
+    handleCellClick,
+    handleCreateSchedule,
+    handleCancelCreate,
+  } = useScheduleActions();
+
+  // Get mouse position from store
+  const mousePosition = useScheduleStore((state) => state.mousePosition);
 
   // Fetch schedules using React Query with pre-filtered data
-  const { data: calendarSchedules = [] } = useSchedules('calendar');
-  const { mutate: createSchedule } = useCreateSchedule();
+  const { data: calendarSchedules = [] } = useGetSchedules('calendar') as {
+    data: Array<{
+      id: string;
+      title: string;
+      description?: string;
+      startTime: Date;
+      endTime: Date;
+      duration: number;
+      status: ScheduleStatus;
+    }>;
+  };
 
   // Generate array of days for the current week
   const weekDays = useMemo(
     () =>
-      Array.from({ length: 7 }, (_, i) => {
-        const date = addDays(weekStart, i);
+      Array.from({ length: 5 }, (_, i) => {
+        // Start from Monday (add 1 to weekStart) and get next 5 days
+        const date = addDays(weekStart, i + 1);
         return {
           date,
           dayName: format(date, 'EEE'),
@@ -196,17 +229,17 @@ export function Calendar() {
         endTime,
         duration: data.duration || 30,
         status: ScheduleStatus.SCHEDULED,
+        participants: [], // Add empty participants array as required by the type
       };
 
       try {
-        // Create schedule in the backend with optimistic update
-        createSchedule(newSchedule);
+        // Create schedule using the store action
+        await useScheduleStore.getState().createSchedule(newSchedule);
 
         // Notify inbox that item has been scheduled
         dispatchInboxItemScheduled(id);
       } catch (error) {
         console.error('Failed to schedule inbox item:', error);
-        // Error handling is done by React Query
       }
     };
 
@@ -215,9 +248,15 @@ export function Calendar() {
         detail;
 
       try {
-        // TODO: Update schedule in the backend
-        // const { mutate } = useUpdateSchedule();
-        // mutate({ id, title, description, startTime, endTime, duration, status });
+        // Update schedule using store action
+        await useScheduleStore.getState().updateSchedule(id, {
+          title,
+          description,
+          startTime,
+          endTime,
+          duration,
+          status,
+        });
       } catch (error) {
         console.error('Failed to update schedule:', error);
       }
@@ -227,9 +266,8 @@ export function Calendar() {
       const { id } = detail;
 
       try {
-        // TODO: Delete schedule in the backend
-        // const { mutate } = useDeleteSchedule();
-        // mutate(id);
+        // Delete schedule using store action
+        await useScheduleStore.getState().deleteSchedule(id);
       } catch (error) {
         console.error('Failed to delete schedule:', error);
       }
@@ -249,84 +287,12 @@ export function Calendar() {
       removeScheduleUpdate();
       removeScheduleDelete();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Handle cell click for new schedule
-  const handleCellClick = (e: React.MouseEvent, date: Date, hour: number) => {
-    // Store mouse position for popover
-    setMousePosition({ x: e.clientX, y: e.clientY });
-
-    const id = crypto.randomUUID();
-    const startTime = new Date(date);
-    startTime.setHours(hour, 0, 0, 0);
-    const endTime = new Date(startTime);
-    endTime.setMinutes(startTime.getMinutes() + 30);
-
-    // Create temporary schedule with visual placeholder
-    setTempSchedule({
-      id,
-      title: 'New Schedule',
-      startTime,
-      endTime,
-      duration: 30,
-      status: ScheduleStatus.SCHEDULED,
-      description: '',
-    });
-    setNewScheduleId(id);
-  };
-
-  // Handle new schedule submission
-  const handleCreateSchedule = async (
-    data: ScheduleFormValues & { endTime: Date },
-  ) => {
-    console.log('Calendar handleCreateSchedule called with:', data);
-    if (!tempSchedule) {
-      console.error('No temporary schedule found');
-      return;
-    }
-
-    try {
-      console.log('Making API request to create schedule');
-      // Create the schedule using apiClient
-      const response = await apiClient.post(API_ENDPOINTS.schedules.create(), {
-        title: data.title,
-        description: data.description,
-        startTime: new Date(data.startTime),
-        endTime: data.endTime,
-        duration: data.duration,
-        status: data.status,
-      });
-
-      console.log('API response:', response);
-
-      if (!response.data) {
-        throw new Error('Failed to create schedule');
-      }
-
-      // Clean up temporary state after submission
-      setNewScheduleId(null);
-      setMousePosition({ x: 0, y: 0 });
-      setTempSchedule(null);
-
-      // Reload the page to refresh data
-      window.location.reload();
-    } catch (error) {
-      console.error('Failed to create schedule:', error);
-    }
-  };
-
-  // Handle new schedule cancellation
-  const handleCancelCreate = () => {
-    setNewScheduleId(null);
-    setMousePosition({ x: 0, y: 0 });
-    setTempSchedule(null);
-  };
 
   return (
     <div className="relative flex h-full flex-col">
       {/* Header */}
-      <div className="grid grid-cols-[auto_repeat(7,1fr)] border-b">
+      <div className="grid grid-cols-[auto_repeat(5,1fr)] border-b">
         {/* Time column header */}
         <div className="w-16 border-r" />
 
@@ -347,7 +313,7 @@ export function Calendar() {
 
       {/* Time grid */}
       <div className="relative flex-1 overflow-y-auto">
-        <div className="grid grid-cols-[auto_repeat(7,1fr)]">
+        <div className="grid grid-cols-[auto_repeat(5,1fr)]">
           {/* Time labels */}
           <div className="w-16 border-r">
             {timeSlots.map(({ hour, label }) => (
@@ -369,27 +335,50 @@ export function Calendar() {
               className="relative border-r"
             >
               {/* Time slots */}
-              {timeSlots.map(({ hour }) => (
-                <div key={hour}>
-                  <TimeSlot
-                    id={`${date.toISOString()}-${hour}-0`}
-                    onClick={(e) => handleCellClick(e, date, hour)}
-                    isHalfHour={false}
-                  />
-                  <TimeSlot
-                    id={`${date.toISOString()}-${hour}-30`}
-                    onClick={(e) => handleCellClick(e, date, hour)}
-                    isHalfHour={true}
-                  />
-                </div>
-              ))}
+              {timeSlots.map(({ hour }) => {
+                const slotDate = new Date(date);
+                const now = new Date();
+                const isPastDate = slotDate < now && !isSameDay(slotDate, now);
+                const isPastTime =
+                  isSameDay(slotDate, now) && hour < now.getHours();
+                const isCurrentHour =
+                  isSameDay(slotDate, now) && hour === now.getHours();
+
+                // Don't render clickable slots for past dates and times
+                if (isPastDate || isPastTime) {
+                  return (
+                    <div
+                      key={hour}
+                      className="h-10 bg-muted/10"
+                    >
+                      <div className="h-5" />
+                      <div className="h-5 border-b border-border" />
+                    </div>
+                  );
+                }
+
+                return (
+                  <div key={hour}>
+                    <TimeSlot
+                      id={`${date.toISOString()}-${hour}-0`}
+                      onClick={(e) => handleCellClick(e, date, hour)}
+                      isHalfHour={false}
+                      isDisabled={isCurrentHour && now.getMinutes() >= 0}
+                    />
+                    <TimeSlot
+                      id={`${date.toISOString()}-${hour}-30`}
+                      onClick={(e) => handleCellClick(e, date, hour)}
+                      isHalfHour={true}
+                      isDisabled={isCurrentHour && now.getMinutes() >= 30}
+                    />
+                  </div>
+                );
+              })}
 
               {/* Schedule items */}
               {calendarSchedules
                 .filter((schedule) => {
-                  // Only show schedules for this day column
-                  const scheduleDate = new Date(schedule.startTime);
-                  return isSameDay(scheduleDate, date);
+                  return isSameDay(schedule.startTime as Date, date);
                 })
                 .map((schedule) => (
                   <ScheduleCell
@@ -409,15 +398,15 @@ export function Calendar() {
             </div>
           ))}
 
-          {/* Current time indicator */}
-          <CurrentTimeIndicator />
+          {/* Current time indicator - moved outside day columns loop */}
+          <CurrentTimeIndicator weekDays={weekDays} />
         </div>
       </div>
 
       {/* New schedule popover */}
-      {newScheduleId && tempSchedule && (
+      {tempSchedule && (
         <Popover
-          open={true}
+          open={!!tempSchedule}
           onOpenChange={(open) => !open && handleCancelCreate()}
         >
           <PopoverTrigger asChild>
@@ -435,7 +424,7 @@ export function Calendar() {
             className="w-80"
             side="right"
             align="start"
-            sideOffset={8}
+            sideOffset={0}
           >
             <ScheduleForm
               mode="create"
@@ -443,6 +432,7 @@ export function Calendar() {
                 title: '',
                 description: '',
                 startTime: tempSchedule.startTime,
+                endTime: tempSchedule.endTime,
                 duration: tempSchedule.duration,
                 status: ScheduleStatus.SCHEDULED,
                 participants: [],
