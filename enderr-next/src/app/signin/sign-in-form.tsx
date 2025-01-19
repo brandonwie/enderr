@@ -1,6 +1,7 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
+
 import Script from 'next/script';
 
 import {
@@ -38,6 +39,8 @@ declare global {
             },
           ) => void;
           prompt: () => void;
+          disableAutoSelect: () => void;
+          revoke: (email: string, callback: () => void) => void;
         };
       };
     };
@@ -65,16 +68,33 @@ export default function SignInForm() {
     }
   };
 
+  useEffect(() => {
+    // Cleanup function to disable auto-select on unmount
+    return () => {
+      if (window.google?.accounts?.id) {
+        window.google.accounts.id.disableAutoSelect();
+      }
+    };
+  }, []);
+
   const initializeGoogleSignIn = () => {
+    // Disable auto-select before re-initializing
+    if (window.google?.accounts?.id) {
+      window.google.accounts.id.disableAutoSelect();
+    }
+
     window.google.accounts.id.initialize({
       client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!,
       callback: handleCredentialResponse,
       auto_select: false,
     });
 
-    window.google.accounts.id.renderButton(
-      document.getElementById('buttonDiv')!,
-      {
+    const buttonContainer = document.getElementById('buttonDiv');
+    if (buttonContainer) {
+      // Clear any existing content
+      buttonContainer.innerHTML = '';
+
+      window.google.accounts.id.renderButton(buttonContainer, {
         type: 'standard',
         theme: 'outline',
         size: 'large',
@@ -82,8 +102,8 @@ export default function SignInForm() {
         shape: 'rectangular',
         logo_alignment: 'left',
         width: 250,
-      },
-    );
+      });
+    }
 
     window.google.accounts.id.prompt();
   };

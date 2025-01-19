@@ -2,7 +2,7 @@
 
 import { ScheduleStatus } from '@shared/types/schedule';
 
-import { ScheduleForm } from '@/components/schedule-form';
+import { ScheduleForm } from '@/components/schedule/schedule-form';
 import {
   Popover,
   PopoverContent,

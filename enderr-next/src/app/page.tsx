@@ -17,8 +17,8 @@ import type { Modifier } from '@dnd-kit/core';
 import { DragItemType, ScheduleStatus } from '@shared/types/schedule';
 
 import { Calendar } from '@/components/calendar';
-import { InboxSchedule } from '@/components/inbox-schedule';
-import { ScheduleCell } from '@/components/schedule-cell';
+import { InboxSchedule } from '@/components/inbox/inbox-schedule';
+import { ScheduleCell } from '@/components/schedule/schedule-cell';
 import { Sidebar } from '@/components/sidebar';
 import {
   dispatchInboxItemDropped,

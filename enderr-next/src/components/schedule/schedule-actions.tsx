@@ -1,3 +1,5 @@
+'use client';
+
 import { ScheduleStatus } from '@shared/types/schedule';
 import { useSetAtom, useAtom } from 'jotai';
 import { useResetAtom } from 'jotai/utils';

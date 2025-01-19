@@ -6,9 +6,9 @@ import { ScheduleStatus } from '@shared/types/schedule';
 import { isSameDay } from 'date-fns';
 import { useAtom, useAtomValue } from 'jotai';
 
-import { useScheduleActions } from '@/components/schedule-actions';
-import { ScheduleCell } from '@/components/schedule-cell';
-import { ScheduleForm } from '@/components/schedule-form';
+import { useScheduleActions } from '@/components/schedule/schedule-actions';
+import { ScheduleCell } from '@/components/schedule/schedule-cell';
+import { ScheduleForm } from '@/components/schedule/schedule-form';
 import {
   Popover,
   PopoverContent,

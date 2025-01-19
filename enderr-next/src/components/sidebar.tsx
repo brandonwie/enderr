@@ -9,8 +9,8 @@ import {
 } from '@dnd-kit/sortable';
 import { DragItemType, ScheduleStatus } from '@shared/types/schedule';
 
-import { InboxForm } from '@/components/inbox-form';
-import { InboxSchedule } from '@/components/inbox-schedule';
+import { InboxForm } from '@/components/inbox/inbox-form';
+import { InboxSchedule } from '@/components/inbox/inbox-schedule';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,

@@ -7,8 +7,8 @@ import { DragItemType } from '@shared/types/schedule';
 import { ScheduleStatus } from '@shared/types/schedule';
 import { format } from 'date-fns';
 
-import { ScheduleForm } from '@/components/schedule-form';
-import { ScheduleFormValues } from '@/components/schedule-form';
+import { ScheduleForm } from '@/components/schedule/schedule-form';
+import { ScheduleFormValues } from '@/components/schedule/schedule-form';
 import {
   Popover,
   PopoverContent,
