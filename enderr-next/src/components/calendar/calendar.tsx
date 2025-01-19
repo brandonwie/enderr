@@ -164,15 +164,11 @@ export function Calendar({
                 key={hour}
                 className="relative h-[60px]"
               >
-                <div className="absolute right-2 top-[-10px] text-xs text-muted-foreground">
+                <div className="absolute right-2 top-[-7px] z-10 bg-white text-xs text-muted-foreground">
                   {label}
                 </div>
                 {/* Hour line */}
-                <div className="absolute left-0 right-[-1440px] top-0 border-t border-muted" />
-                {/* 15-minute interval guides */}
-                <div className="absolute left-0 right-[-1440px] top-[15px] border-t border-dashed border-muted/30" />
-                <div className="absolute left-0 right-[-1440px] top-[30px] border-t border-dashed border-muted/30" />
-                <div className="absolute left-0 right-[-1440px] top-[45px] border-t border-dashed border-muted/30" />
+                <div className="absolute left-0 right-[-1440px] top-0 border-t border-muted/50 bg-zinc-400/50" />
               </div>
             ))}
           </div>
