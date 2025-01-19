@@ -11,7 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { useAuth } from '@/contexts/auth-context';
+import { useAuth } from '@/stores/auth';
 
 // Enhanced type declarations for Google Identity Services
 declare global {

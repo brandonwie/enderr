@@ -60,6 +60,7 @@ export function InboxItemModal({
                 startTime: new Date(),
                 participants: [],
               }}
+              onSubmit={onClose}
             />
           </div>
 

@@ -57,15 +57,24 @@ import { TimeSlot } from './time-slot';
  * @param props.onScheduleUpdate - Callback when a schedule is updated
  * @param props.onScheduleCreate - Callback when a new schedule is created
  * @param props.onScheduleDelete - Callback when a schedule is deleted
+ * @param props.onColumnClick - Callback when a column is clicked
+ * @param props.onScheduleClick - Callback when a schedule is clicked
  */
 export function Calendar({
   onScheduleUpdate,
   onScheduleCreate,
   onScheduleDelete,
+  onColumnClick,
+  onScheduleClick,
 }: {
   onScheduleUpdate: (id: string, data: ScheduleFormValues) => Promise<void>;
   onScheduleCreate: (data: ScheduleFormValues) => Promise<void>;
   onScheduleDelete: (id: string) => Promise<void>;
+  onColumnClick: (event: React.MouseEvent, date: Date) => void;
+  onScheduleClick: (
+    schedule: ScheduleFormValues,
+    event: React.MouseEvent,
+  ) => void;
 }) {
   // Get atoms
   const weekDays = useAtomValue(weekDaysAtom);
@@ -73,8 +82,7 @@ export function Calendar({
   const mousePosition = useAtomValue(mousePositionAtom);
 
   // Use schedule actions hook
-  const { handleCellClick, handleCreateSchedule, handleCancelCreate } =
-    useScheduleActions();
+  const { handleCancelCreate } = useScheduleActions();
 
   // Fetch schedules using React Query with pre-filtered data
   const { data: calendarSchedules = [] } = useGetSchedules('calendar');
@@ -89,48 +97,6 @@ export function Calendar({
       })),
     [],
   );
-
-  const handleColumnClick = (event: React.MouseEvent, date: Date) => {
-    // Don't create temp schedule if we're clicking on a schedule cell
-    if ((event.target as HTMLElement).closest('.schedule-cell')) {
-      return;
-    }
-
-    // Get click position relative to calendar grid
-    const calendarGrid = document.querySelector('.calendar-grid');
-    if (!calendarGrid) return;
-
-    const gridRect = calendarGrid.getBoundingClientRect();
-    const relativeY = event.clientY - gridRect.top;
-
-    // Calculate time from click position
-    const pixelsPerHour = 60; // 60px per hour
-    const halfHourPixels = pixelsPerHour / 2; // 30px for 30 minutes
-
-    // Calculate hour and snap minutes to either 00 or 30
-    const hour = Math.floor(relativeY / pixelsPerHour);
-    const isSecondHalf = relativeY % pixelsPerHour >= halfHourPixels;
-    const minute = isSecondHalf ? 30 : 0;
-
-    // Create new date with clicked time
-    const newTime = new Date(date);
-    newTime.setHours(hour);
-    newTime.setMinutes(minute);
-    newTime.setSeconds(0);
-    newTime.setMilliseconds(0);
-
-    // Create temporary schedule
-    const tempSchedule = {
-      id: 'temp-' + Date.now(),
-      title: '',
-      startTime: newTime,
-      endTime: new Date(newTime.getTime() + 30 * 60 * 1000), // 30 minutes duration
-      duration: 30,
-      status: ScheduleStatus.SCHEDULED,
-    };
-
-    setTempSchedule(tempSchedule);
-  };
 
   return (
     <div className="relative flex h-full flex-col">
@@ -181,7 +147,7 @@ export function Calendar({
                 date={date}
                 isToday={isToday}
                 data-droppable={date.toISOString()}
-                onClick={(e) => handleColumnClick(e, date)}
+                onClick={(e) => onColumnClick(e, date)}
                 className="cursor-pointer"
               >
                 {calendarSchedules
@@ -199,6 +165,24 @@ export function Calendar({
                       endTime={schedule.endTime as Date}
                       onUpdate={onScheduleUpdate}
                       onDelete={onScheduleDelete}
+                      onClick={(e) =>
+                        onScheduleClick(
+                          {
+                            ...schedule,
+                            startTime: schedule.startTime as Date,
+                            endTime: schedule.endTime as Date,
+                            participants: (schedule.participants || []).map(
+                              (p) => ({
+                                id: p.id,
+                                email: p.id,
+                                name: p.name,
+                                picture: p.picture,
+                              }),
+                            ),
+                          },
+                          e,
+                        )
+                      }
                     />
                   ))}
 
@@ -208,6 +192,7 @@ export function Calendar({
                     key={tempSchedule.id}
                     {...tempSchedule}
                     isDragOverlay={false}
+                    isTemp={true}
                     onUpdate={onScheduleUpdate}
                     onDelete={onScheduleDelete}
                   />
@@ -281,12 +266,65 @@ function DayColumn({
   onClick?: (event: React.MouseEvent) => void;
   className?: string;
 }) {
-  const { setNodeRef } = useDroppable({
-    id: date.toISOString(),
+  // Track mouse position for calculating drop time
+  const [mouseY, setMouseY] = useState<number | null>(null);
+  const [currentTimeSlot, setCurrentTimeSlot] = useState<{
+    hour: number;
+    minute: number;
+  } | null>(null);
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const relativeY = e.clientY - rect.top;
+    setMouseY(relativeY);
+
+    // Calculate time from mouse position
+    const pixelsPerHour = 60; // 60px per hour
+    const hour = Math.floor(relativeY / pixelsPerHour);
+    const minute = Math.floor((relativeY % pixelsPerHour) / 15) * 15;
+
+    // Only update if we've moved to a new time slot
+    if (
+      !currentTimeSlot ||
+      currentTimeSlot.hour !== hour ||
+      currentTimeSlot.minute !== minute
+    ) {
+      setCurrentTimeSlot({ hour, minute });
+    }
+  };
+
+  // Calculate drop time from current time slot
+  const dropTime = useMemo(() => {
+    if (!currentTimeSlot) return date;
+
+    const newDate = new Date(date);
+    newDate.setHours(currentTimeSlot.hour, currentTimeSlot.minute, 0, 0);
+    return newDate;
+  }, [date, currentTimeSlot]);
+
+  const { setNodeRef, isOver } = useDroppable({
+    id: `${date.toISOString()}-${dropTime.getHours()}-${dropTime.getMinutes()}`,
     data: {
-      date,
+      type: 'cell',
+      date: dropTime,
+      time: dropTime,
     },
   });
+
+  // Calculate the position of the highlight
+  const highlightPosition = useMemo(() => {
+    if (!isOver || !currentTimeSlot) return null;
+
+    const top =
+      ((currentTimeSlot.hour * 60 + currentTimeSlot.minute) / (24 * 60)) * 100;
+
+    return {
+      top: `${top}%`,
+      height: '30px', // Default 30-minute slot
+      width: '95%',
+      left: 0,
+    };
+  }, [isOver, currentTimeSlot]);
 
   return (
     <div
@@ -297,7 +335,15 @@ function DayColumn({
         className,
       )}
       onClick={onClick}
+      onMouseMove={handleMouseMove}
     >
+      {/* Drop target highlight */}
+      {highlightPosition && (
+        <div
+          className="pointer-events-none absolute bg-primary/10 transition-all duration-75 ease-in-out"
+          style={highlightPosition}
+        />
+      )}
       {children}
     </div>
   );

@@ -18,7 +18,7 @@ export const metadata: Metadata = {
  * Root Layout
  * @remarks Wraps the entire app with necessary providers and global components
  */
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;

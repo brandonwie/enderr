@@ -5,7 +5,7 @@ import { useTheme } from 'next-themes';
 import { LogOut, Moon, Sun } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { useAuth } from '@/contexts/auth-context';
+import { useAuth } from '@/stores/auth';
 
 /**
  * Header component
@@ -24,7 +24,7 @@ export function Header() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={signOut}
+              onClick={() => signOut()}
               title="Sign out"
             >
               <LogOut className="h-5 w-5" />

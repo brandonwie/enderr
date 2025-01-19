@@ -55,7 +55,7 @@ export interface ScheduleFormProps {
   defaultValues: Partial<ScheduleFormValues>;
   onSubmit: (data: ScheduleFormValues) => void;
   onCancel?: () => void;
-  onDelete?: () => void;
+  onDelete?: (id: string) => void;
 }
 
 /**
@@ -122,11 +122,9 @@ export function ScheduleForm({
   };
 
   const handleDelete = async () => {
-    console.log('delete', defaultValues);
-    console.log('mode', mode);
     try {
-      if (mode === 'edit' && defaultValues.id) {
-        await deleteSchedule(defaultValues.id);
+      if (mode === 'edit' && defaultValues.id && onDelete) {
+        await onDelete(defaultValues.id);
       }
     } catch (error) {
       console.error('Failed to delete schedule:', error);
@@ -215,6 +213,10 @@ export function ScheduleForm({
                     min={15}
                     step={15}
                     {...field}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      field.onChange(value === '' ? '' : Number(value));
+                    }}
                   />
                 </FormControl>
                 <FormMessage />
@@ -270,7 +272,10 @@ export function ScheduleForm({
             <Button
               type="button"
               variant="destructive"
-              onClick={handleDelete}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDelete();
+              }}
             >
               Delete
             </Button>

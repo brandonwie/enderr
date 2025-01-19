@@ -27,9 +27,11 @@ interface ScheduleCellProps {
   status: ScheduleStatus;
   duration: number;
   isDragOverlay?: boolean;
+  isTemp?: boolean;
   columnHeight?: number | null;
-  onUpdate?: (id: string, data: any) => Promise<void>;
+  onUpdate?: (id: string, data: ScheduleFormValues) => Promise<void>;
   onDelete?: (id: string) => Promise<void>;
+  onClick?: (event: React.MouseEvent) => void;
 }
 
 // Helper functions for schedule colors
@@ -76,11 +78,26 @@ export function ScheduleCell({
   status,
   duration,
   isDragOverlay,
+  isTemp,
   columnHeight: propColumnHeight,
   onUpdate,
   onDelete,
+  onClick,
 }: ScheduleCellProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  // Make this element draggable only if it's not a temp schedule
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id,
+    data: {
+      type: DragItemType.SCHEDULE,
+      title,
+      description,
+      startTime,
+      endTime,
+      duration,
+      status,
+    },
+    disabled: isTemp, // Disable dragging for temp schedules
+  });
 
   // Ensure startTime and endTime are Date objects
   const start = startTime instanceof Date ? startTime : new Date(startTime);
@@ -97,67 +114,44 @@ export function ScheduleCell({
       ? (heightPercentage / 100) * propColumnHeight
       : heightPercentage;
 
-  // Handle click event
-  const handleClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setIsOpen(true);
-  };
-
   return (
-    <Popover
-      open={isOpen}
-      onOpenChange={setIsOpen}
+    <div
+      ref={!isTemp ? setNodeRef : undefined} // Only set drag ref if not temp
+      {...(!isTemp ? attributes : {})} // Only add drag attributes if not temp
+      {...(!isTemp ? listeners : {})} // Only add drag listeners if not temp
+      onClick={(e) => {
+        // Only handle click if we're not dragging
+        if (!isDragging && !isDragOverlay) {
+          e.stopPropagation();
+          onClick?.(e);
+        }
+      }}
+      className={cn(
+        'schedule-cell',
+        'pointer-events-auto absolute flex min-w-0 flex-wrap gap-1 rounded-md px-2 py-1',
+        !isTemp && 'cursor-grab hover:shadow-md active:cursor-grabbing', // Only add drag cursor if not temp
+        isDragOverlay && 'shadow-md',
+        isDragging && 'opacity-50',
+      )}
+      style={{
+        top: `${baseTop}%`,
+        height: `${height}${isDragOverlay ? 'px' : '%'}`,
+        backgroundColor: getScheduleColor(status),
+        color: getScheduleTextColor(status),
+        zIndex: isDragOverlay ? 999 : isDragging ? 50 : 1,
+        width: '95%',
+        left: 0,
+        transition: isDragOverlay ? 'none' : 'all 0.2s ease',
+        position: 'absolute',
+        transform: isDragOverlay ? 'translate3d(0, 0, 0)' : undefined,
+        touchAction: 'none', // Prevent touch scrolling while dragging
+        opacity: isDragging ? 0.5 : 1,
+      }}
     >
-      <PopoverTrigger asChild>
-        <div
-          onClick={handleClick}
-          className={cn(
-            'schedule-cell',
-            'pointer-events-auto absolute flex min-w-0 flex-wrap gap-1 rounded-md px-2 py-1',
-            'cursor-grab hover:shadow-md',
-            isDragOverlay && 'shadow-md',
-          )}
-          style={{
-            top: `${baseTop}%`,
-            height: `${height}${isDragOverlay ? 'px' : '%'}`,
-            backgroundColor: getScheduleColor(status),
-            color: getScheduleTextColor(status),
-            zIndex: isDragOverlay ? 999 : 1,
-            width: isDragOverlay ? '100%' : '95%',
-            left: 0,
-            transition: 'none',
-            position: 'absolute',
-          }}
-        >
-          <h3 className="truncate text-xs font-medium">{title}</h3>
-          <time className="text-[10px]">
-            {format(start, 'HH:mm')} - {format(end, 'HH:mm')}
-          </time>
-        </div>
-      </PopoverTrigger>
-      <PopoverContent className="w-80">
-        <ScheduleForm
-          mode="edit"
-          defaultValues={{
-            id,
-            title,
-            description: description || '',
-            startTime: start,
-            endTime: end,
-            status,
-            duration,
-            participants: [],
-          }}
-          onSubmit={(data) => {
-            onUpdate?.(id, data);
-            setIsOpen(false);
-          }}
-          onDelete={() => {
-            onDelete?.(id);
-            setIsOpen(false);
-          }}
-        />
-      </PopoverContent>
-    </Popover>
+      <h3 className="truncate text-xs font-medium">{title}</h3>
+      <time className="text-[10px]">
+        {format(start, 'HH:mm')} - {format(end, 'HH:mm')}
+      </time>
+    </div>
   );
 }
