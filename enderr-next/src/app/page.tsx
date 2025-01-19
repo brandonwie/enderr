@@ -20,6 +20,7 @@ import { useAtom } from 'jotai';
 import { Calendar } from '@/components/calendar';
 import { InboxSchedule } from '@/components/inbox/inbox-schedule';
 import { ScheduleCell } from '@/components/schedule/schedule-cell';
+import type { ScheduleFormValues } from '@/components/schedule/schedule-form';
 import { Sidebar } from '@/components/sidebar';
 import {
   dispatchInboxItemDropped,
@@ -54,6 +55,7 @@ interface DragData {
  * - Fixed width sidebar (256px)
  * - Fluid calendar view that fills remaining space
  * - Shared DndContext for drag and drop between components
+ * - Centralized event handling for all schedule operations
  */
 export default function Home() {
   // Track active drag item
@@ -66,7 +68,8 @@ export default function Home() {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8, // Require 8px of movement before starting drag
+        delay: 500, // Wait 200ms before starting drag
+        tolerance: 5, // Allow 5px of movement during delay
       },
     }),
   );
@@ -295,6 +298,46 @@ export default function Home() {
     }
   };
 
+  // Handle schedule updates
+  const handleScheduleUpdate = async (id: string, data: ScheduleFormValues) => {
+    try {
+      await useScheduleStore.getState().updateSchedule(id, data);
+      dispatchScheduleUpdate(
+        id,
+        data.title,
+        data.description,
+        data.startTime,
+        data.endTime,
+        data.duration,
+        data.status,
+      );
+    } catch (error) {
+      console.error('Failed to update schedule:', error);
+    }
+  };
+
+  // Handle schedule creation
+  const handleScheduleCreate = async (data: ScheduleFormValues) => {
+    try {
+      await useScheduleStore.getState().createSchedule({
+        ...data,
+        participants: data.participants || [],
+      });
+    } catch (error) {
+      console.error('Failed to create schedule:', error);
+    }
+  };
+
+  // Handle schedule deletion
+  const handleScheduleDelete = async (id: string) => {
+    try {
+      await useScheduleStore.getState().deleteSchedule(id);
+      dispatchScheduleDelete(id);
+    } catch (error) {
+      console.error('Failed to delete schedule:', error);
+    }
+  };
+
   return (
     <DndContext
       sensors={sensors}
@@ -307,7 +350,11 @@ export default function Home() {
     >
       <main className="grid h-[calc(100vh-3.5rem)] grid-cols-[256px_1fr]">
         <Sidebar />
-        <Calendar />
+        <Calendar
+          onScheduleUpdate={handleScheduleUpdate}
+          onScheduleCreate={handleScheduleCreate}
+          onScheduleDelete={handleScheduleDelete}
+        />
       </main>
 
       {/* Drag Overlay */}

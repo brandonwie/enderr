@@ -28,6 +28,8 @@ interface ScheduleCellProps {
   duration: number;
   isDragOverlay?: boolean;
   columnHeight?: number | null;
+  onUpdate?: (id: string, data: any) => Promise<void>;
+  onDelete?: (id: string) => Promise<void>;
 }
 
 // Helper functions for schedule colors
@@ -62,7 +64,6 @@ const getScheduleTextColor = (status: ScheduleStatus) => {
  * @remarks
  * Represents a schedule item in the calendar grid
  * - Positioned absolutely based on start/end times
- * - Draggable for rescheduling
  * - Shows title and time range
  * - Supports editing via popover
  */
@@ -76,11 +77,10 @@ export function ScheduleCell({
   duration,
   isDragOverlay,
   columnHeight: propColumnHeight,
+  onUpdate,
+  onDelete,
 }: ScheduleCellProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState(0);
-  const updateSchedule = useScheduleStore((state) => state.updateSchedule);
 
   // Ensure startTime and endTime are Date objects
   const start = startTime instanceof Date ? startTime : new Date(startTime);
@@ -97,99 +97,11 @@ export function ScheduleCell({
       ? (heightPercentage / 100) * propColumnHeight
       : heightPercentage;
 
-  // Calculate the actual time based on snapped position (only for overlay)
-  const snappedTime = isDragOverlay
-    ? percentToTime(baseTop + dragOffset, start)
-    : start;
-  const snappedEndTime = isDragOverlay
-    ? new Date(snappedTime.getTime() + duration * 60 * 1000)
-    : end;
-
-  // For overlay, calculate position based on snapped time
-  const overlayTop = isDragOverlay
-    ? ((snappedTime.getHours() * 60 + snappedTime.getMinutes()) / 1440) * 100
-    : baseTop;
-
-  // Use snapped position for overlay, original position for base cell
-  const top = isDragOverlay ? overlayTop : baseTop;
-
-  // Make this element draggable
-  const { attributes, listeners, setNodeRef, transform } = useDraggable({
-    id,
-    data: {
-      type: DragItemType.SCHEDULE,
-      id,
-      title,
-      description,
-      startTime: isDragOverlay ? snappedTime : start,
-      endTime: isDragOverlay ? snappedEndTime : end,
-      duration,
-      status,
-    },
-  });
-
-  // Handle drag start
-  useEffect(() => {
-    if (transform) {
-      setIsDragging(true);
-    } else {
-      setIsDragging(false);
-      setDragOffset(0);
-    }
-  }, [transform]);
-
-  // Close popover when dragging starts
-  useEffect(() => {
-    if (isDragging && isOpen) {
-      setIsOpen(false);
-    }
-  }, [isDragging, isOpen]);
-
-  const handleUpdate = async (data: ScheduleFormValues) => {
-    try {
-      // Close popover first for better UX
-      setIsOpen(false);
-
-      // Update schedule using store action
-      await updateSchedule(id, {
-        title: data.title,
-        description: data.description,
-        startTime: data.startTime,
-        endTime: data.endTime,
-        duration: data.duration,
-        status: data.status,
-      });
-
-      // Dispatch update event for any listeners
-      dispatchScheduleUpdate(
-        id,
-        data.title,
-        data.description,
-        data.startTime,
-        data.endTime,
-        data.duration,
-        data.status,
-      );
-    } catch (error) {
-      console.error('Failed to update schedule:', error);
-      // Reopen popover on error
-      setIsOpen(true);
-    }
+  // Handle click event
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsOpen(true);
   };
-
-  console.log('ScheduleCell Debug:', {
-    id,
-    isDragOverlay,
-    duration,
-    heightPercentage: `${heightPercentage}%`,
-    columnHeight: propColumnHeight,
-    finalHeight: `${height}${isDragOverlay ? 'px' : '%'}`,
-    transform: transform?.toString(),
-    dragOffset,
-    top: `${top}%`,
-    baseTop: `${baseTop}%`,
-    snappedTop: `${snappedTime}%`,
-  });
 
   return (
     <Popover
@@ -198,33 +110,28 @@ export function ScheduleCell({
     >
       <PopoverTrigger asChild>
         <div
-          ref={setNodeRef}
-          {...attributes}
-          {...listeners}
+          onClick={handleClick}
           className={cn(
-            'pointer-events-auto absolute flex min-w-0 flex-wrap gap-1 rounded-md px-2 py-1',
-            isDragging && 'cursor-grabbing opacity-50',
-            !isDragging && 'cursor-grab hover:shadow-md',
-            isDragOverlay && 'shadow-md',
             'schedule-cell',
+            'pointer-events-auto absolute flex min-w-0 flex-wrap gap-1 rounded-md px-2 py-1',
+            'cursor-grab hover:shadow-md',
+            isDragOverlay && 'shadow-md',
           )}
           style={{
-            top: `${top}%`,
+            top: `${baseTop}%`,
             height: `${height}${isDragOverlay ? 'px' : '%'}`,
             backgroundColor: getScheduleColor(status),
             color: getScheduleTextColor(status),
-            zIndex: isDragOverlay ? 999 : isDragging ? 30 : 1,
-            width: isDragOverlay ? '100%' : '90%',
-            marginLeft: isDragOverlay ? 0 : '5%',
+            zIndex: isDragOverlay ? 999 : 1,
+            width: isDragOverlay ? '100%' : '95%',
+            left: 0,
             transition: 'none',
             position: 'absolute',
-            opacity: isDragging && !isDragOverlay ? 0.5 : 1,
           }}
         >
           <h3 className="truncate text-xs font-medium">{title}</h3>
           <time className="text-[10px]">
-            {format(isDragOverlay ? snappedTime : start, 'HH:mm')} -{' '}
-            {format(isDragOverlay ? snappedEndTime : end, 'HH:mm')}
+            {format(start, 'HH:mm')} - {format(end, 'HH:mm')}
           </time>
         </div>
       </PopoverTrigger>
@@ -241,7 +148,14 @@ export function ScheduleCell({
             duration,
             participants: [],
           }}
-          onSubmit={handleUpdate}
+          onSubmit={(data) => {
+            onUpdate?.(id, data);
+            setIsOpen(false);
+          }}
+          onDelete={() => {
+            onDelete?.(id);
+            setIsOpen(false);
+          }}
         />
       </PopoverContent>
     </Popover>
