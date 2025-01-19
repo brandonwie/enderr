@@ -15,6 +15,7 @@ import {
 } from '@dnd-kit/core';
 import type { Modifier } from '@dnd-kit/core';
 import { DragItemType, ScheduleStatus } from '@shared/types/schedule';
+import { useAtom } from 'jotai';
 
 import { Calendar } from '@/components/calendar';
 import { InboxSchedule } from '@/components/inbox/inbox-schedule';
@@ -27,6 +28,7 @@ import {
   dispatchScheduleToInbox,
   dispatchScheduleUpdate,
 } from '@/lib/user-event';
+import { dragPreviewAtom } from '@/stores/calendar-store';
 import { useScheduleStore } from '@/stores/use-schedule-store';
 
 /**
@@ -58,6 +60,7 @@ export default function Home() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeDragData, setActiveDragData] = useState<DragData | null>(null);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [dragPreview, setDragPreview] = useAtom(dragPreviewAtom);
 
   // Configure drag sensors with a minimum drag distance
   const sensors = useSensors(
@@ -72,6 +75,7 @@ export default function Home() {
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as string);
     setActiveDragData(event.active.data.current as DragData);
+    setDragPreview(null);
 
     if (event.activatorEvent instanceof MouseEvent) {
       setMousePosition({
@@ -85,11 +89,23 @@ export default function Home() {
   const handleDragOver = (event: DragOverEvent) => {
     const { active, over } = event;
 
-    // Update mouse position during drag
-    if (event.activatorEvent instanceof MouseEvent) {
-      setMousePosition({
-        x: event.activatorEvent.clientX,
-        y: event.activatorEvent.clientY,
+    if (
+      over?.data.current?.type === 'cell' &&
+      over.data.current.time instanceof Date
+    ) {
+      const targetTime = over.data.current.time as Date;
+      const activeDragData = active.data.current as DragData;
+      const duration = activeDragData.duration || 30;
+
+      // Create preview
+      const endTime = new Date(targetTime);
+      endTime.setMinutes(targetTime.getMinutes() + duration);
+
+      setDragPreview({
+        id: active.id as string,
+        startTime: targetTime,
+        endTime,
+        duration,
       });
     }
 
@@ -99,6 +115,14 @@ export default function Home() {
       over.data.current?.type === DragItemType.INBOX
     ) {
       dispatchInboxReorder(active.id as string, over.id as string);
+    }
+
+    // Update mouse position during drag
+    if (event.activatorEvent instanceof MouseEvent) {
+      setMousePosition({
+        x: event.activatorEvent.clientX,
+        y: event.activatorEvent.clientY,
+      });
     }
   };
 
@@ -124,6 +148,7 @@ export default function Home() {
 
     setActiveId(null);
     setActiveDragData(null);
+    setDragPreview(null);
 
     if (!over) return;
 
@@ -276,6 +301,7 @@ export default function Home() {
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
+      onDragCancel={() => setDragPreview(null)}
       collisionDetection={pointerWithin}
       modifiers={[adjustTranslate]}
     >
@@ -297,16 +323,20 @@ export default function Home() {
           transform: 'translate(-50%, -50%)',
           pointerEvents: 'none',
           cursor: 'grabbing',
+          width: 'auto',
+          height: 'auto',
+          zIndex: 50,
         }}
       >
         {activeId && activeDragData && (
-          <div className="w-[200px] opacity-90 shadow-lg">
+          <div className="opacity-90 shadow-lg">
             {activeDragData.type === DragItemType.INBOX ? (
               <InboxSchedule
                 id={activeId}
                 title={activeDragData.title}
                 description={activeDragData.description}
                 duration={activeDragData.duration || 30}
+                isDragging
               />
             ) : (
               <ScheduleCell

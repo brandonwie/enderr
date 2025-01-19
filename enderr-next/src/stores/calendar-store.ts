@@ -23,6 +23,13 @@ export interface Schedule extends NewSchedule {
   id: string;
 }
 
+export interface DragPreview {
+  id: string;
+  startTime: Date;
+  endTime: Date;
+  duration: number;
+}
+
 /**
  * Calendar state atoms
  */
@@ -56,12 +63,13 @@ export const tempScheduleAtom = atomWithReset<Schedule | null>(null);
  * @remarks Calculates week days based on weekStartAtom
  */
 export const weekDaysAtom = atom((get) => {
-  const weekStart = get(weekStartAtom);
-  const today = get(currentTimeAtom);
+  const today = new Date();
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - today.getDay() + 1); // Get Monday
 
   return Array.from({ length: 5 }, (_, i) => {
-    const date = new Date(weekStart);
-    date.setDate(weekStart.getDate() + i + 1); // Start from Monday (i + 1)
+    const date = new Date(monday);
+    date.setDate(monday.getDate() + i);
     return {
       date,
       dayName: date.toLocaleDateString('en-US', { weekday: 'short' }),
@@ -70,3 +78,5 @@ export const weekDaysAtom = atom((get) => {
     };
   });
 });
+
+export const dragPreviewAtom = atom<DragPreview | null>(null);

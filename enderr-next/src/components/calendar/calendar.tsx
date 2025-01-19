@@ -81,20 +81,14 @@ export function Calendar() {
       const endTime = new Date(startTime);
       endTime.setMinutes(startTime.getMinutes() + (data.duration || 30));
 
-      // Create a new schedule
-      const newSchedule = {
-        title: data.title,
-        description: data.description,
-        startTime,
-        endTime,
-        duration: data.duration || 30,
-        status: ScheduleStatus.SCHEDULED,
-        participants: [], // Add empty participants array as required by the type
-      };
-
       try {
-        // Create schedule using the store action
-        await useScheduleStore.getState().createSchedule(newSchedule);
+        // Update the existing schedule instead of creating a new one
+        await useScheduleStore.getState().updateSchedule(id, {
+          startTime,
+          endTime,
+          duration: data.duration || 30,
+          status: ScheduleStatus.SCHEDULED,
+        });
 
         // Notify inbox that item has been scheduled
         dispatchInboxItemScheduled(id);
@@ -173,9 +167,9 @@ export function Calendar() {
 
       {/* Time grid */}
       <div className="relative flex-1 overflow-y-auto">
-        <div className="grid grid-cols-[auto_repeat(5,1fr)]">
+        <div className="grid h-full grid-cols-[auto_repeat(5,1fr)] bg-yellow-500">
           {/* Time labels */}
-          <div className="w-16 border-r">
+          <div className="w-16 border-r bg-blue-500">
             {timeSlots.map(({ hour, label }) => (
               <div
                 key={hour}
@@ -192,80 +186,69 @@ export function Calendar() {
           {weekDays.map(({ date, isToday }) => (
             <div
               key={date.toISOString()}
-              className="relative border-r"
+              className={cn(
+                'relative h-full border-r bg-green-500',
+                isToday && 'bg-primary/5',
+              )}
             >
               {/* Time slots */}
-              {timeSlots.map(({ hour }) => {
-                const slotDate = new Date(date);
-                const now = new Date();
-                const isPastDate = slotDate < now && !isSameDay(slotDate, now);
-                const isPastTime =
-                  isSameDay(slotDate, now) && hour < now.getHours();
-                const isCurrentHour =
-                  isSameDay(slotDate, now) && hour === now.getHours();
-
-                // Don't render clickable slots for past dates and times
-                if (isPastDate || isPastTime) {
-                  return (
-                    <div
-                      key={hour}
-                      className="h-10"
-                    >
-                      <TimeSlot
-                        id={`${date.toISOString()}-${hour}-0`}
-                        onClick={(e) => handleCellClick(e, date, hour)}
-                        isHalfHour={false}
-                      />
-                      <TimeSlot
-                        id={`${date.toISOString()}-${hour}-30`}
-                        onClick={(e) => handleCellClick(e, date, hour)}
-                        isHalfHour={true}
-                      />
-                    </div>
-                  );
-                }
-
-                return (
-                  <div key={hour}>
+              <div className="h-full">
+                {timeSlots.map(({ hour }) => (
+                  <div
+                    key={hour}
+                    className="h-10"
+                  >
                     <TimeSlot
                       id={`${date.toISOString()}-${hour}-0`}
                       onClick={(e) => handleCellClick(e, date, hour)}
                       isHalfHour={false}
+                      slotTime={(() => {
+                        const time = new Date(date);
+                        time.setHours(hour, 0, 0, 0);
+                        return time;
+                      })()}
                     />
                     <TimeSlot
                       id={`${date.toISOString()}-${hour}-30`}
                       onClick={(e) => handleCellClick(e, date, hour)}
                       isHalfHour={true}
+                      slotTime={(() => {
+                        const time = new Date(date);
+                        time.setHours(hour, 30, 0, 0);
+                        return time;
+                      })()}
                     />
                   </div>
-                );
-              })}
+                ))}
+              </div>
 
               {/* Schedule items */}
-              {calendarSchedules
-                .filter((schedule) => {
-                  return (
-                    schedule.startTime &&
-                    isSameDay(schedule.startTime as Date, date)
-                  );
-                })
-                .map((schedule) => (
-                  <ScheduleCell
-                    key={schedule.id}
-                    {...schedule}
-                    startTime={schedule.startTime as Date}
-                    endTime={schedule.endTime as Date}
-                  />
-                ))}
+              <div className="pointer-events-none absolute inset-0">
+                {calendarSchedules
+                  .filter((schedule) => {
+                    return (
+                      schedule.startTime &&
+                      isSameDay(schedule.startTime as Date, date)
+                    );
+                  })
+                  .map((schedule) => (
+                    <ScheduleCell
+                      key={schedule.id}
+                      {...schedule}
+                      startTime={schedule.startTime as Date}
+                      endTime={schedule.endTime as Date}
+                    />
+                  ))}
 
-              {/* Temporary schedule cell */}
-              {tempSchedule && isSameDay(tempSchedule.startTime, date) && (
-                <ScheduleCell
-                  key={tempSchedule.id}
-                  {...tempSchedule}
-                  isDragOverlay={false}
-                />
-              )}
+                {/* Temporary schedule cell */}
+                {tempSchedule && isSameDay(tempSchedule.startTime, date) && (
+                  <ScheduleCell
+                    key={tempSchedule.id}
+                    {...tempSchedule}
+                    isDragOverlay={false}
+                  />
+                )}
+              </div>
             </div>
           ))}
 

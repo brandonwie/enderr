@@ -6,6 +6,8 @@ import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { DragItemType } from '@shared/types/schedule';
 
+import { cn } from '@/lib/utils';
+
 interface InboxScheduleProps {
   id: string;
   title: string;
@@ -46,20 +48,22 @@ export function InboxSchedule({
     },
   });
 
-  const style = {
-    transform: CSS.Transform.toString(
-      isDragging ? { x: 0, y: 0, scaleX: 1, scaleY: 1 } : null,
-    ),
-  };
+  const style = isDragging
+    ? {
+        width: '200px',
+      }
+    : undefined;
 
   return (
     <div
       ref={setNodeRef}
       {...attributes}
       {...listeners}
-      className={`flex cursor-move items-center gap-2 rounded-md border bg-card p-2 text-card-foreground hover:bg-accent hover:text-accent-foreground ${
-        isDraggingItem ? 'opacity-50' : ''
-      }`}
+      className={cn(
+        'flex cursor-move items-center gap-2 rounded-md border bg-card p-2 text-card-foreground hover:bg-accent hover:text-accent-foreground',
+        isDraggingItem && 'opacity-50',
+        isDragging && 'shadow-md',
+      )}
       style={style}
       onClick={(e) => {
         // Only navigate if not dragging

@@ -153,16 +153,20 @@ export function ScheduleCell({
           {...attributes}
           {...listeners}
           className={cn(
-            'absolute left-0 right-1 flex min-w-0 flex-wrap gap-1 rounded-md px-2 py-1',
+            'pointer-events-auto absolute left-0 right-0 flex min-w-0 flex-wrap gap-1 rounded-md px-2 py-1',
             isDragging && 'cursor-grabbing opacity-50',
-            !isDragging && 'cursor-grab',
-            isDragOverlay && 'shadow-md',
+            !isDragging && 'cursor-grab hover:shadow-md',
+            isDragOverlay &&
+              'relative !left-auto !right-auto !top-auto w-[200px] shadow-md',
           )}
           style={{
-            top: `${top}px`,
+            top: isDragOverlay ? undefined : `${top}px`,
             height: `${height}px`,
             backgroundColor: getScheduleColor(status),
             color: getScheduleTextColor(status),
+            zIndex: isDragOverlay ? 50 : 30,
+            width: isDragOverlay ? undefined : 'calc(100% - 4px)',
+            marginLeft: isDragOverlay ? undefined : '2px',
           }}
         >
           <h3 className="truncate text-xs font-medium">{title}</h3>
