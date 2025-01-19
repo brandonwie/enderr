@@ -1,5 +1,5 @@
 {
-  "name": "enderr",
+  "name": "@enderr/shared",
   "private": true,
   "scripts": {
     "dev": "concurrently \"pnpm react:dev\" \"pnpm nest:dev\"",
