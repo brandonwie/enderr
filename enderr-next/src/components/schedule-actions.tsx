@@ -1,5 +1,12 @@
 import { ScheduleStatus } from '@shared/types/schedule';
+import { useSetAtom, useAtom } from 'jotai';
+import { useResetAtom } from 'jotai/utils';
 
+import {
+  mousePositionAtom,
+  tempScheduleAtom,
+  type Schedule,
+} from '@/stores/calendar-store';
 import { useScheduleStore } from '@/stores/use-schedule-store';
 
 /**
@@ -7,14 +14,13 @@ import { useScheduleStore } from '@/stores/use-schedule-store';
  * This demonstrates the usage of both UI state and async actions
  */
 export function useScheduleActions() {
-  const {
-    tempSchedule,
-    setTempSchedule,
-    setNewScheduleId,
-    setMousePosition,
-    resetScheduleCreation,
-    createSchedule,
-  } = useScheduleStore();
+  // Jotai atoms for UI state
+  const [tempSchedule, setTempSchedule] = useAtom(tempScheduleAtom);
+  const setMousePosition = useSetAtom(mousePositionAtom);
+  const resetTempSchedule = useResetAtom(tempScheduleAtom);
+
+  // Zustand store for async actions (TODO: migrate to React Query)
+  const { createSchedule } = useScheduleStore();
 
   const handleCellClick = (e: React.MouseEvent, date: Date, hour: number) => {
     e.preventDefault();
@@ -43,7 +49,6 @@ export function useScheduleActions() {
       status: ScheduleStatus.SCHEDULED,
       description: '',
     });
-    setNewScheduleId(id);
   };
 
   const handleCreateSchedule = async (data: {
@@ -59,15 +64,16 @@ export function useScheduleActions() {
         ...data,
         participants: [],
       });
-      // Store will automatically reset creation state after successful creation
+      // Reset UI state after successful creation
+      resetTempSchedule();
     } catch (error) {
       console.error('Failed to create schedule:', error);
-      resetScheduleCreation();
+      resetTempSchedule();
     }
   };
 
   const handleCancelCreate = () => {
-    resetScheduleCreation();
+    resetTempSchedule();
   };
 
   return {

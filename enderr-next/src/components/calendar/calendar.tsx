@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 
-import { useDroppable } from '@dnd-kit/core';
 import { ScheduleStatus } from '@shared/types/schedule';
-import { addDays, addMinutes, format, isSameDay, startOfWeek } from 'date-fns';
+import { isSameDay } from 'date-fns';
+import { useAtom, useAtomValue } from 'jotai';
 
 import { useScheduleActions } from '@/components/schedule-actions';
 import { ScheduleCell } from '@/components/schedule-cell';
@@ -25,186 +25,37 @@ import {
   dispatchInboxItemScheduled,
 } from '@/lib/user-event';
 import { cn } from '@/lib/utils';
+import {
+  mousePositionAtom,
+  tempScheduleAtom,
+  weekDaysAtom,
+} from '@/stores/calendar-store';
 import { useScheduleStore } from '@/stores/use-schedule-store';
 
-// Base schedule type without ID
-interface NewSchedule {
-  startTime: Date;
-  endTime: Date;
-  title: string;
-  description?: string;
-  duration: number;
-  status: ScheduleStatus;
-}
-
-// Full schedule type with ID for saved schedules
-interface Schedule extends NewSchedule {
-  id: string;
-}
-
-/**
- * TimeSlot Component
- * @remarks
- * Represents a 30-minute droppable time slot in the calendar grid
- * Each hour is divided into two slots (XX:00 and XX:30)
- * - Hover effect shows light primary color
- * - Drop target highlight when dragging over
- * - Border on half-hour slots
- *
- * @param id - Unique identifier for the time slot (format: "timestamp-hour-minute")
- * @param onClick - Handler for creating new schedules
- */
-function TimeSlot({
-  id,
-  onClick,
-  isHalfHour,
-}: {
-  id: string;
-  onClick: (e: React.MouseEvent) => void;
-  isHalfHour: boolean;
-}) {
-  // Make this element a drop target
-  const { setNodeRef, isOver, active } = useDroppable({
-    id,
-    data: {
-      type: 'cell',
-      id,
-    },
-  });
-
-  // Only log when being dragged over
-  useEffect(() => {
-    if (isOver) {
-      console.log('🎯 Drop target active:', {
-        id,
-        hasActiveItem: !!active,
-      });
-    }
-  }, [isOver, id, active]);
-
-  return (
-    <div
-      ref={setNodeRef}
-      data-droppable-id={id}
-      className={cn(
-        'h-5 transition-colors hover:bg-primary/5',
-        isHalfHour && 'border-b border-border',
-        isOver && 'bg-primary/10',
-        active && 'relative z-10',
-      )}
-      onClick={onClick}
-    />
-  );
-}
-
-/**
- * CurrentTimeIndicator Component
- * @remarks
- * Shows the current time as a line across the calendar
- * Updates every minute
- * Includes a circle on the left border * Only shows in today's column
- */
-function CurrentTimeIndicator({
-  weekDays,
-}: {
-  weekDays: Array<{ date: Date }>;
-}) {
-  const [now, setNow] = useState(new Date());
-
-  // Update current time every minute
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setNow(new Date());
-    }, 300000); // 300000ms = 5 minutes
-
-    return () => clearInterval(interval);
-  }, []);
-
-  // Calculate position based on current time
-  const minutes = now.getHours() * 60 + now.getMinutes();
-  const top = (minutes / 30) * 20; // 20px per 30min slot
-
-  // Calculate left position based on today's column index
-  const todayIndex = weekDays.findIndex((day) => isSameDay(day.date, now));
-  // Account for the time label column (w-16) in left position calculation
-  const left =
-    todayIndex >= 0
-      ? `calc(64px + (${todayIndex} * (100% - 64px) / 5))`
-      : '64px';
-  const width = `calc((100% - 64px) / 5)`;
-
-  if (todayIndex === -1) return null;
-
-  return (
-    <div
-      className="pointer-events-none absolute z-50"
-      style={{
-        top: `${top}px`,
-        left,
-        width,
-      }}
-    >
-      {/* Circle on the left */}
-      <div className="absolute -left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-red-500" />
-      {/* Line across */}
-      <div className="absolute left-0 right-0 top-1/2 border-t border-red-500" />
-    </div>
-  );
-}
+import { CurrentTimeIndicator } from './current-time-indicator';
+import { TimeSlot } from './time-slot';
 
 /**
  * Calendar Component
  * @remarks
  * Weekly view calendar with:
  * - Time grid (0-24h)
- * - Day columns (Sun-Mon)
+ * - Day columns (Mon-Fri)
  * - Current time indicator
  * - Draggable schedule items
  */
 export function Calendar() {
-  // Memoized current date to prevent unnecessary re-renders
-  const today = useMemo(() => new Date(), []);
-  const weekStart = startOfWeek(today);
+  // Get atoms
+  const weekDays = useAtomValue(weekDaysAtom);
+  const [tempSchedule, setTempSchedule] = useAtom(tempScheduleAtom);
+  const mousePosition = useAtomValue(mousePositionAtom);
 
-  // Use schedule actions hook instead of local state
-  const {
-    tempSchedule,
-    handleCellClick,
-    handleCreateSchedule,
-    handleCancelCreate,
-  } = useScheduleActions();
-
-  // Get mouse position from store
-  const mousePosition = useScheduleStore((state) => state.mousePosition);
+  // Use schedule actions hook
+  const { handleCellClick, handleCreateSchedule, handleCancelCreate } =
+    useScheduleActions();
 
   // Fetch schedules using React Query with pre-filtered data
-  const { data: calendarSchedules = [] } = useGetSchedules('calendar') as {
-    data: Array<{
-      id: string;
-      title: string;
-      description?: string;
-      startTime: Date;
-      endTime: Date;
-      duration: number;
-      status: ScheduleStatus;
-    }>;
-  };
-
-  // Generate array of days for the current week
-  const weekDays = useMemo(
-    () =>
-      Array.from({ length: 5 }, (_, i) => {
-        // Start from Monday (add 1 to weekStart) and get next 5 days
-        const date = addDays(weekStart, i + 1);
-        return {
-          date,
-          dayName: format(date, 'EEE'),
-          dayNumber: format(date, 'd'),
-          isToday: isSameDay(date, today),
-        };
-      }),
-    [weekStart, today],
-  );
+  const { data: calendarSchedules = [] } = useGetSchedules('calendar');
 
   // Generate array of hour slots (0-24)
   const timeSlots = useMemo(
@@ -338,7 +189,7 @@ export function Calendar() {
           </div>
 
           {/* Day columns */}
-          {weekDays.map(({ date }) => (
+          {weekDays.map(({ date, isToday }) => (
             <div
               key={date.toISOString()}
               className="relative border-r"
@@ -393,12 +244,17 @@ export function Calendar() {
               {/* Schedule items */}
               {calendarSchedules
                 .filter((schedule) => {
-                  return isSameDay(schedule.startTime as Date, date);
+                  return (
+                    schedule.startTime &&
+                    isSameDay(schedule.startTime as Date, date)
+                  );
                 })
                 .map((schedule) => (
                   <ScheduleCell
                     key={schedule.id}
                     {...schedule}
+                    startTime={schedule.startTime as Date}
+                    endTime={schedule.endTime as Date}
                   />
                 ))}
 
@@ -413,7 +269,7 @@ export function Calendar() {
             </div>
           ))}
 
-          {/* Current time indicator - moved outside day columns loop */}
+          {/* Current time indicator */}
           <CurrentTimeIndicator weekDays={weekDays} />
         </div>
       </div>

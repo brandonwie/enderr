@@ -1,14 +1,11 @@
 'use client';
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-} from 'react';
+import { useCallback, useEffect } from 'react';
 
 import { usePathname, useRouter } from 'next/navigation';
+
+import { atom, useAtom } from 'jotai';
+import { atomWithStorage } from 'jotai/utils';
 
 import { apiClient, API_ENDPOINTS } from '@/lib/api-client';
 
@@ -24,65 +21,72 @@ interface AuthTokens {
   refresh_token: string;
 }
 
-interface AuthContextType {
-  user: AuthUser | null;
-  loading: boolean;
-  setUser: (user: AuthUser | null) => void;
-  signOut: () => Promise<void>;
-  handleGoogleCallback: (credential: string) => Promise<void>;
-}
-
-const AuthContext = createContext<AuthContextType | null>(null);
-
 const PUBLIC_PATHS = ['/signin'];
 
 const TOKEN_KEY = 'auth_tokens';
 
 /**
- * Authentication Provider Component
- * @remarks Handles authentication state and token management
+ * Auth tokens atom with localStorage persistence
+ * @remarks Uses atomWithStorage to persist tokens in localStorage
  */
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [loading, setLoading] = useState(true);
+const authTokensAtom = atomWithStorage<AuthTokens | null>(TOKEN_KEY, null);
+
+/**
+ * Auth user atom
+ * @remarks Derived from authTokensAtom
+ */
+const authUserAtom = atom<AuthUser | null>(null);
+
+/**
+ * Loading state atom
+ */
+const authLoadingAtom = atom<boolean>(true);
+
+/**
+ * Hook for auth-related actions and state
+ * @returns Auth state and actions
+ */
+export function useAuth() {
+  const [user, setUser] = useAtom(authUserAtom);
+  const [tokens, setTokens] = useAtom(authTokensAtom);
+  const [loading, setLoading] = useAtom(authLoadingAtom);
   const router = useRouter();
   const pathname = usePathname();
 
   /**
-   * Save tokens to localStorage and update auth header
+   * Save tokens and update auth header
    */
-  const saveTokens = useCallback((tokens: AuthTokens) => {
-    localStorage.setItem(TOKEN_KEY, JSON.stringify(tokens));
-    apiClient.defaults.headers.common['Authorization'] =
-      `Bearer ${tokens.access_token}`;
-  }, []);
+  const saveTokens = useCallback(
+    (newTokens: AuthTokens) => {
+      setTokens(newTokens);
+      apiClient.defaults.headers.common['Authorization'] =
+        `Bearer ${newTokens.access_token}`;
+    },
+    [setTokens],
+  );
 
   /**
    * Clear tokens and user state
    */
   const clearTokens = useCallback(() => {
-    localStorage.removeItem(TOKEN_KEY);
-    delete apiClient.defaults.headers.common['Authorization'];
+    setTokens(null);
     setUser(null);
-  }, []);
+    delete apiClient.defaults.headers.common['Authorization'];
+  }, [setTokens, setUser]);
 
   /**
    * Handle Google OAuth callback
-   * @param credential - JWT token from Google Identity Services
    */
   const handleGoogleCallback = useCallback(
     async (credential: string) => {
       try {
-        // Get tokens from backend
         const { data: tokens } = await apiClient.post<AuthTokens>(
           API_ENDPOINTS.auth.googleCallback(),
           { credential },
         );
 
-        // Save tokens
         saveTokens(tokens);
 
-        // Fetch user data
         const { data } = await apiClient.get<{ user: AuthUser }>(
           API_ENDPOINTS.auth.me(),
         );
@@ -94,7 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw error;
       }
     },
-    [router, saveTokens, clearTokens],
+    [router, saveTokens, clearTokens, setUser],
   );
 
   /**
@@ -106,67 +110,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [router, clearTokens]);
 
   /**
-   * Initialize authentication state
-   * Attempts to restore session from stored tokens
+   * Initialize auth state
    */
-  const initAuth = useCallback(async () => {
-    try {
-      const storedTokens = localStorage.getItem(TOKEN_KEY);
-      if (!storedTokens) {
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (!tokens) {
+          if (!PUBLIC_PATHS.includes(pathname)) {
+            router.push('/signin');
+          }
+          setLoading(false);
+          return;
+        }
+
+        apiClient.defaults.headers.common['Authorization'] =
+          `Bearer ${tokens.access_token}`;
+
+        const { data } = await apiClient.get<{ user: AuthUser }>(
+          API_ENDPOINTS.auth.me(),
+        );
+        setUser(data.user);
+
+        if (pathname === '/signin') {
+          router.push('/');
+        }
+      } catch (error) {
+        console.error('Auth initialization failed:', error);
+        clearTokens();
         if (!PUBLIC_PATHS.includes(pathname)) {
           router.push('/signin');
         }
+      } finally {
         setLoading(false);
-        return;
       }
+    };
 
-      const tokens = JSON.parse(storedTokens) as AuthTokens;
-      if (!tokens.access_token) {
-        throw new Error('Invalid stored tokens');
-      }
-
-      // Set auth header
-      apiClient.defaults.headers.common['Authorization'] =
-        `Bearer ${tokens.access_token}`;
-
-      // Fetch user data
-      const { data } = await apiClient.get<{ user: AuthUser }>(
-        API_ENDPOINTS.auth.me(),
-      );
-      setUser(data.user);
-
-      if (pathname === '/signin') {
-        router.push('/');
-      }
-    } catch (error) {
-      console.error('Auth initialization failed:', error);
-      clearTokens();
-      if (!PUBLIC_PATHS.includes(pathname)) {
-        router.push('/signin');
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [pathname, router, clearTokens]);
-
-  // Initialize auth state on mount and pathname change
-  useEffect(() => {
     initAuth();
-  }, [initAuth]);
+  }, [pathname, router, tokens, clearTokens, setUser, setLoading]);
 
-  return (
-    <AuthContext.Provider
-      value={{ user, loading, setUser, signOut, handleGoogleCallback }}
-    >
-      {children}
-    </AuthContext.Provider>
-  );
+  return {
+    user,
+    loading,
+    setUser,
+    signOut,
+    handleGoogleCallback,
+  };
 }
 
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
+/**
+ * Hook to get current auth user
+ * @returns Current auth user or null
+ */
+export function useAuthUser() {
+  const [user] = useAtom(authUserAtom);
+  return user;
+}
+
+/**
+ * Hook to check if user is authenticated
+ * @returns true if authenticated, false otherwise
+ */
+export function useIsAuthenticated() {
+  const user = useAuthUser();
+  return user !== null;
 }
