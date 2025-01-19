@@ -15,7 +15,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { dispatchScheduleUpdate } from '@/lib/user-event';
-import { cn } from '@/lib/utils';
+import { cn, snapToTimeGrid, percentToTime } from '@/lib/utils';
 import { useScheduleStore } from '@/stores/use-schedule-store';
 
 interface ScheduleCellProps {
@@ -27,6 +27,7 @@ interface ScheduleCellProps {
   status: ScheduleStatus;
   duration: number;
   isDragOverlay?: boolean;
+  columnHeight?: number | null;
 }
 
 // Helper functions for schedule colors
@@ -74,34 +75,68 @@ export function ScheduleCell({
   status,
   duration,
   isDragOverlay,
+  columnHeight: propColumnHeight,
 }: ScheduleCellProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState(0);
   const updateSchedule = useScheduleStore((state) => state.updateSchedule);
 
   // Ensure startTime and endTime are Date objects
   const start = startTime instanceof Date ? startTime : new Date(startTime);
   const end = endTime instanceof Date ? endTime : new Date(endTime);
 
-  // Calculate position and height
-  const startMinutes = start.getHours() * 60 + start.getMinutes();
-  const endMinutes = end.getHours() * 60 + end.getMinutes();
-  const height = (duration / 30) * 20; // 20px per 30min slot
-  const top = (startMinutes / 30) * 20;
+  // Calculate position and height as percentages of 24 hours
+  const startHours = start.getHours() + start.getMinutes() / 60;
+  const baseTop = (startHours / 24) * 100;
+
+  // Calculate height based on duration and column height
+  const heightPercentage = (duration / 1440) * 100;
+  const height =
+    isDragOverlay && propColumnHeight
+      ? (heightPercentage / 100) * propColumnHeight
+      : heightPercentage;
+
+  // Calculate the actual time based on snapped position (only for overlay)
+  const snappedTime = isDragOverlay
+    ? percentToTime(baseTop + dragOffset, start)
+    : start;
+  const snappedEndTime = isDragOverlay
+    ? new Date(snappedTime.getTime() + duration * 60 * 1000)
+    : end;
+
+  // For overlay, calculate position based on snapped time
+  const overlayTop = isDragOverlay
+    ? ((snappedTime.getHours() * 60 + snappedTime.getMinutes()) / 1440) * 100
+    : baseTop;
+
+  // Use snapped position for overlay, original position for base cell
+  const top = isDragOverlay ? overlayTop : baseTop;
 
   // Make this element draggable
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id,
     data: {
       type: DragItemType.SCHEDULE,
       id,
       title,
       description,
-      startTime: start,
-      endTime: end,
+      startTime: isDragOverlay ? snappedTime : start,
+      endTime: isDragOverlay ? snappedEndTime : end,
       duration,
       status,
     },
   });
+
+  // Handle drag start
+  useEffect(() => {
+    if (transform) {
+      setIsDragging(true);
+    } else {
+      setIsDragging(false);
+      setDragOffset(0);
+    }
+  }, [transform]);
 
   // Close popover when dragging starts
   useEffect(() => {
@@ -142,6 +177,20 @@ export function ScheduleCell({
     }
   };
 
+  console.log('ScheduleCell Debug:', {
+    id,
+    isDragOverlay,
+    duration,
+    heightPercentage: `${heightPercentage}%`,
+    columnHeight: propColumnHeight,
+    finalHeight: `${height}${isDragOverlay ? 'px' : '%'}`,
+    transform: transform?.toString(),
+    dragOffset,
+    top: `${top}%`,
+    baseTop: `${baseTop}%`,
+    snappedTop: `${snappedTime}%`,
+  });
+
   return (
     <Popover
       open={isOpen}
@@ -153,25 +202,29 @@ export function ScheduleCell({
           {...attributes}
           {...listeners}
           className={cn(
-            'pointer-events-auto absolute left-0 right-0 flex min-w-0 flex-wrap gap-1 rounded-md px-2 py-1',
+            'pointer-events-auto absolute flex min-w-0 flex-wrap gap-1 rounded-md px-2 py-1',
             isDragging && 'cursor-grabbing opacity-50',
             !isDragging && 'cursor-grab hover:shadow-md',
-            isDragOverlay &&
-              'relative !left-auto !right-auto !top-auto w-[200px] shadow-md',
+            isDragOverlay && 'shadow-md',
+            'schedule-cell',
           )}
           style={{
-            top: isDragOverlay ? undefined : `${top}px`,
-            height: `${height}px`,
+            top: `${top}%`,
+            height: `${height}${isDragOverlay ? 'px' : '%'}`,
             backgroundColor: getScheduleColor(status),
             color: getScheduleTextColor(status),
-            zIndex: isDragOverlay ? 50 : 30,
-            width: isDragOverlay ? undefined : 'calc(100% - 4px)',
-            marginLeft: isDragOverlay ? undefined : '2px',
+            zIndex: isDragOverlay ? 999 : isDragging ? 30 : 1,
+            width: isDragOverlay ? '100%' : '90%',
+            marginLeft: isDragOverlay ? 0 : '5%',
+            transition: 'none',
+            position: 'absolute',
+            opacity: isDragging && !isDragOverlay ? 0.5 : 1,
           }}
         >
           <h3 className="truncate text-xs font-medium">{title}</h3>
           <time className="text-[10px]">
-            {format(start, 'HH:mm')} - {format(end, 'HH:mm')}
+            {format(isDragOverlay ? snappedTime : start, 'HH:mm')} -{' '}
+            {format(isDragOverlay ? snappedEndTime : end, 'HH:mm')}
           </time>
         </div>
       </PopoverTrigger>
