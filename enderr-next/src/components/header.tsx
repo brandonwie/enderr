@@ -1,19 +1,34 @@
 'use client';
 
 import { useTheme } from 'next-themes';
+import { useRouter } from 'next/navigation';
 
+import { useAtomValue } from 'jotai';
 import { LogOut, Moon, Sun } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { useAuth } from '@/stores/auth';
+import { AUTH_TOKENS_KEY, authUserAtom } from '@/stores/auth';
 
 /**
  * Header component
  * @remarks Shows on all pages, contains theme toggle and sign-out button when authenticated
  */
-export function Header() {
-  const { user, signOut } = useAuth();
+export default function Header() {
+  const user = useAtomValue(authUserAtom);
   const { resolvedTheme, setTheme } = useTheme();
+  const router = useRouter();
+
+  const signOut = () => {
+    try {
+      console.log('[Auth Debug] Sign out initiated');
+      // Clear tokens first
+      localStorage.removeItem(AUTH_TOKENS_KEY);
+      // Then redirect to prevent any authenticated requests
+      router.push('/signin');
+    } catch (error) {
+      console.error('[Auth Debug] Sign out failed:', error);
+    }
+  };
 
   return (
     <header className="sticky top-0 z-10 w-full border-b bg-background/95 px-16 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -24,7 +39,7 @@ export function Header() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => signOut()}
+              onClick={signOut}
               title="Sign out"
             >
               <LogOut className="h-5 w-5" />

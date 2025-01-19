@@ -3,33 +3,32 @@
 import { API_PATHS } from '@shared/constants';
 import { Schedule } from '@shared/types/schedule';
 import axios, { AxiosError } from 'axios';
-import { getDefaultStore, useStore } from 'jotai';
 
-import { authTokensAtom } from '@/stores/auth';
+import { AUTH_TOKENS_KEY } from '@/stores/auth';
 
 // Create API client instance
 export const apiClient = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
 });
 
 // Request interceptor to inject token
 apiClient.interceptors.request.use((config) => {
-  const store = getDefaultStore();
-  const tokens = store.get(authTokensAtom);
-  console.log('TOKENS', tokens);
-  if (tokens !== null) {
-    try {
-      const { access_token } = tokens;
+  try {
+    const tokensStr = localStorage.getItem(AUTH_TOKENS_KEY);
+    console.log('[Auth Debug interceptor] Raw tokens:', tokensStr);
 
-      if (access_token) {
-        config.headers.Authorization = `Bearer ${access_token}`;
-      }
-    } catch (error) {
-      console.error('Failed to parse auth tokens:', error);
+    if (!tokensStr) {
+      console.log('[Auth Debug interceptor] No tokens found');
+      return config;
     }
+
+    const tokens = JSON.parse(tokensStr);
+    if (tokens && tokens.access_token) {
+      console.log('[Auth Debug interceptor] Adding token to request');
+      config.headers.Authorization = `Bearer ${tokens.access_token}`;
+    }
+  } catch (error) {
+    console.error('[Auth Debug interceptor] Failed to process tokens:', error);
   }
   return config;
 });
@@ -38,6 +37,11 @@ apiClient.interceptors.request.use((config) => {
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
+    // If we get a 401, clear the tokens
+    if (error.response?.status === 401) {
+      console.log('[Auth Debug interceptor] 401 response, clearing tokens');
+      localStorage.removeItem(AUTH_TOKENS_KEY);
+    }
     return Promise.reject(error);
   },
 );

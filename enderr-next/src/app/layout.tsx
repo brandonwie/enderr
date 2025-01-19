@@ -1,24 +1,16 @@
-import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+'use client';
 
-import { Header } from '@/components/header';
+import Header from '@/components/header';
 import { Toaster } from '@/components/ui/toaster';
 import { RootProvider } from '@/providers/root-provider';
 
 import './globals.css';
 
-const inter = Inter({ subsets: ['latin'] });
-
-export const metadata: Metadata = {
-  title: 'Enderr',
-  description: 'Calendar app with concurrent editing',
-};
-
 /**
  * Root Layout
  * @remarks Wraps the entire app with necessary providers and global components
  */
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
@@ -28,7 +20,7 @@ export default async function RootLayout({
       lang="en"
       suppressHydrationWarning
     >
-      <body className={inter.className}>
+      <body>
         <RootProvider>
           <Header />
           {children}
