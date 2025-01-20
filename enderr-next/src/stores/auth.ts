@@ -87,9 +87,8 @@ export function useAuth() {
       { credential },
     );
 
-    console.log('GOOGLE_CALLBACK_TOKENS', tokens);
-
     setTokens(tokens);
+    apiClient.defaults.headers.Authorization = `Bearer ${tokens.access_token}`;
     router.push('/');
   };
 

@@ -19,7 +19,7 @@ export const apiClient = axios.create({
 apiClient.interceptors.request.use((config) => {
   const store = getDefaultStore();
   const tokens = store.get(authTokensAtom);
-  console.log('TOKENS', tokens);
+
   if (tokens !== null) {
     try {
       const { access_token } = tokens;
