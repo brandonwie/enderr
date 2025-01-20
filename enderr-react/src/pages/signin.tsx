@@ -1,40 +1,146 @@
-import { Navigate } from 'react-router-dom';
-import { useAtomValue } from 'jotai';
-import { isAuthenticatedAtom } from '@/lib/auth';
+import { useEffect, useRef } from 'react';
+import { useSetAtom } from 'jotai';
+import { loginAtom } from '@/store/auth';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import logger from '@/lib/logger';
+
+// Enhanced type declarations for Google Identity Services
+declare global {
+  interface Window {
+    google: {
+      accounts: {
+        id: {
+          initialize: (config: {
+            client_id: string;
+            callback: (response: { credential: string }) => void;
+            auto_select?: boolean;
+            use_fedcm_for_prompt?: boolean;
+          }) => void;
+          renderButton: (
+            parent: HTMLElement,
+            options: {
+              type?: 'standard' | 'icon';
+              theme?: 'outline' | 'filled';
+              size?: 'large' | 'medium' | 'small';
+              text?: 'signin_with' | 'signup_with' | 'continue_with' | 'signin';
+              shape?: 'rectangular' | 'pill' | 'circle' | 'square';
+              logo_alignment?: 'left' | 'center';
+              width?: number;
+              locale?: string;
+            }
+          ) => void;
+          prompt: () => void;
+          disableAutoSelect: () => void;
+          revoke: (email: string, callback: () => void) => void;
+        };
+      };
+    };
+  }
+}
 
 /**
- * Sign in page component
- * @remarks Handles user authentication with Google OAuth
+ * Sign In Form Component
+ * @remarks
+ * - Uses Google Identity Services for authentication
+ * - Supports personalized button display for returning users
+ * - Button width >= 200px to allow personalized display
+ * - Uses 'standard' type to enable personalization
  */
-export default function SignInPage() {
-  const isAuthenticated = useAtomValue(isAuthenticatedAtom);
+export default function SignInForm() {
+  const googleScriptLoadedRef = useRef(false);
+  const login = useSetAtom(loginAtom);
 
-  // Redirect to main page if already authenticated
-  if (isAuthenticated) {
-    return <Navigate to='/' replace />;
-  }
+  const handleCredentialResponse = async (response: { credential: string }) => {
+    logger.info('🚀 Starting Google sign-in...', {
+      credential: response.credential,
+    });
+
+    try {
+      // Start login process
+      await login({ credential: response.credential });
+    } catch (error) {
+      // Don't do anything here - loginAtom will handle the cleanup
+      logger.error('❌ Sign-in process failed:', error);
+    }
+  };
+
+  const initializeGoogleSignIn = () => {
+    if (!window.google?.accounts?.id) {
+      logger.warn('Google Identity Services not loaded yet');
+      return;
+    }
+
+    // Disable auto-select before re-initializing
+    window.google.accounts.id.disableAutoSelect();
+
+    window.google.accounts.id.initialize({
+      client_id: import.meta.env.VITE_PUBLIC_GOOGLE_CLIENT_ID!,
+      callback: handleCredentialResponse,
+      auto_select: false,
+    });
+
+    const buttonContainer = document.getElementById('buttonDiv');
+    if (buttonContainer) {
+      // Clear any existing content
+      buttonContainer.innerHTML = '';
+
+      window.google.accounts.id.renderButton(buttonContainer, {
+        type: 'standard',
+        theme: 'outline',
+        size: 'large',
+        text: 'signin_with',
+        shape: 'rectangular',
+        logo_alignment: 'left',
+        width: 250,
+      });
+    }
+
+    window.google.accounts.id.prompt();
+  };
+
+  useEffect(() => {
+    // Load Google Identity Services script
+    if (!googleScriptLoadedRef.current) {
+      const script = document.createElement('script');
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.async = true;
+      script.defer = true;
+      script.onload = () => {
+        googleScriptLoadedRef.current = true;
+        initializeGoogleSignIn();
+      };
+      document.body.appendChild(script);
+
+      return () => {
+        // Cleanup script and disable auto-select on unmount
+        document.body.removeChild(script);
+        if (window.google?.accounts?.id) {
+          window.google.accounts.id.disableAutoSelect();
+        }
+      };
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
-    <div className='flex min-h-[calc(100vh-8rem)] items-center justify-center'>
-      <div className='mx-auto flex w-full flex-col justify-center space-y-6 sm:w-[350px]'>
-        <div className='flex flex-col space-y-2 text-center'>
-          <h1 className='text-2xl font-semibold tracking-tight'>
-            Welcome back
-          </h1>
-          <p className='text-sm text-muted-foreground'>
-            Sign in with your Google account to continue
-          </p>
-        </div>
-
-        <button
-          className='inline-flex h-10 w-full items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium ring-offset-background transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
-          onClick={() => {
-            // TODO: Implement Google sign in
-          }}
-        >
-          Continue with Google
-        </button>
-      </div>
+    <div className='flex h-screen w-screen items-center justify-center bg-indigo-400/50'>
+      <Card className='w-[350px]'>
+        <CardHeader>
+          <CardTitle>Enderr, your last calendar</CardTitle>
+          <CardDescription>
+            Sign up with your Google account to continue
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div id='buttonDiv' className='flex justify-center'></div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

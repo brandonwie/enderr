@@ -1,12 +1,6 @@
-import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import {
-  AUTH_LOADING_STATE,
-  initializeAuthAtom,
-  isAuthenticatedAtom,
-  loadingStateAtom,
-} from '@/lib/auth';
+import { useAtomValue } from 'jotai';
+import { isAuthenticatedAtom } from '@/store/auth';
 import { Outlet } from 'react-router-dom';
-import { useEffect } from 'react';
 
 /**
  * Root layout component
@@ -14,19 +8,6 @@ import { useEffect } from 'react';
  */
 export default function RootLayout() {
   const isAuthenticated = useAtomValue(isAuthenticatedAtom);
-
-  const [, setLoadingState] = useAtom(loadingStateAtom);
-  const initialize = useSetAtom(initializeAuthAtom);
-
-  // Initialize auth state once
-  useEffect(() => {
-    setLoadingState(AUTH_LOADING_STATE.IDLE);
-    const initAuth = async () => {
-      await initialize();
-    };
-
-    initAuth();
-  }, [initialize, setLoadingState]);
 
   return (
     <div className='min-h-screen bg-background'>

@@ -1,9 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
-import * as cookieParser from 'cookie-parser';
 
 import { AppModule } from './app.module';
-import { CustomLogger } from './logger/logger.service';
 
 /**
  * Bootstrap function to start the NestJS application
@@ -30,12 +28,15 @@ async function bootstrap() {
     }),
   );
 
-  // Cookie parser middleware with JWT secret for signed cookies
-  app.use(cookieParser(process.env.JWT_SECRET));
-
   // CORS configuration
   app.enableCors({
-    origin: '*',
+    origin:
+      process.env.NODE_ENV === 'production'
+        ? process.env.FRONTEND_URL
+        : 'http://localhost:3000',
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
   const port = process.env.PORT || 8080;

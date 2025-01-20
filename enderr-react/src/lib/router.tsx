@@ -1,25 +1,23 @@
 import { Navigate, createBrowserRouter } from 'react-router-dom';
-import RootLayout from '@/components/layout/root-layout';
-import ProtectedRoute from '@/components/auth/protected-route';
+import RootRoute from '@/lib/RootRoute';
 import SignInPage from '@/pages/signin';
 import MainPage from '@/pages/main';
 
 /**
  * Router configuration
- * @remarks Defines the application routes and their protection status
+ * @remarks
+ * - ProtectedRoute is the top-level component to handle auth state
+ * - Public routes (signin) are rendered when not authenticated
+ * - Protected routes (main) are rendered when authenticated
  */
 export const router = createBrowserRouter([
   {
     path: '/',
-    element: <RootLayout />,
+    element: <RootRoute />,
     children: [
       {
         index: true,
-        element: (
-          <ProtectedRoute>
-            <MainPage />
-          </ProtectedRoute>
-        ),
+        element: <MainPage />,
       },
       {
         path: 'signin',

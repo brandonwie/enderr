@@ -1,7 +1,6 @@
 import { API_PATHS } from "@shared/constants";
 import type { Schedule, Note } from "@shared/types";
 import type {
-  ApiResponse,
   AuthTokens,
   MeResponse,
   CreateScheduleDto,
@@ -17,7 +16,7 @@ export const API_ENDPOINTS = {
   auth: {
     me: () => "/auth/me",
     signOut: () => "/auth/signout",
-    googleCallback: () => "/auth/google/callback",
+    signIn: () => "/auth/google/callback",
     refresh: () => "/auth/refresh",
   },
   schedules: {
@@ -44,22 +43,17 @@ export const API_ENDPOINTS = {
  * @remarks Handles all auth-related API calls
  */
 export const authApi = {
-  me: () => axiosClient.get<ApiResponse<MeResponse>>(API_ENDPOINTS.auth.me()),
-
-  signOut: () =>
-    axiosClient.post<ApiResponse<void>>(API_ENDPOINTS.auth.signOut()),
+  me: () => axiosClient.get<MeResponse>(API_ENDPOINTS.auth.me()),
 
   refresh: (data: { refresh_token: string }) =>
-    axiosClient.post<ApiResponse<AuthTokens>>(
-      API_ENDPOINTS.auth.refresh(),
-      data
-    ),
+    axiosClient.post<AuthTokens>(API_ENDPOINTS.auth.refresh(), data),
 
-  googleCallback: (credential: string) =>
-    axiosClient.post<ApiResponse<AuthTokens>>(
-      API_ENDPOINTS.auth.googleCallback(),
-      { credential }
-    ),
+  signIn: (credential: string) =>
+    axiosClient.post<AuthTokens>(API_ENDPOINTS.auth.signIn(), { credential }),
+
+  setAuthHeader: (token: string) => {
+    axiosClient.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+  },
 };
 
 /**
@@ -68,34 +62,23 @@ export const authApi = {
  */
 export const scheduleApi = {
   create: (data: CreateScheduleDto) =>
-    axiosClient.post<ApiResponse<Schedule>>(
-      API_ENDPOINTS.schedules.create(),
-      data
-    ),
+    axiosClient.post<Schedule>(API_ENDPOINTS.schedules.create(), data),
 
   get: (id: string) =>
-    axiosClient.get<ApiResponse<Schedule>>(API_ENDPOINTS.schedules.detail(id)),
+    axiosClient.get<Schedule>(API_ENDPOINTS.schedules.detail(id)),
 
   update: (id: string, data: UpdateScheduleDto) =>
-    axiosClient.patch<ApiResponse<Schedule>>(
-      API_ENDPOINTS.schedules.update(id),
-      data
-    ),
+    axiosClient.patch<Schedule>(API_ENDPOINTS.schedules.update(id), data),
 
   delete: (id: string) =>
-    axiosClient.delete<ApiResponse<void>>(API_ENDPOINTS.schedules.delete(id)),
+    axiosClient.delete(API_ENDPOINTS.schedules.delete(id)),
 
-  list: () =>
-    axiosClient.get<ApiResponse<Schedule[]>>(API_ENDPOINTS.schedules.list()),
+  list: () => axiosClient.get<Schedule[]>(API_ENDPOINTS.schedules.list()),
 
   inbox: {
-    list: () =>
-      axiosClient.get<ApiResponse<Schedule[]>>(API_ENDPOINTS.schedules.inbox()),
+    list: () => axiosClient.get<Schedule[]>(API_ENDPOINTS.schedules.inbox()),
     updateOrder: (data: { ids: string[] }) =>
-      axiosClient.patch<ApiResponse<void>>(
-        API_ENDPOINTS.schedules.inboxOrder(),
-        data
-      ),
+      axiosClient.patch(API_ENDPOINTS.schedules.inboxOrder(), data),
   },
 };
 
@@ -105,21 +88,17 @@ export const scheduleApi = {
  */
 export const noteApi = {
   create: (data: Partial<Note>) =>
-    axiosClient.post<ApiResponse<Note>>(API_ENDPOINTS.notes.create(), data),
+    axiosClient.post<Note>(API_ENDPOINTS.notes.create(), data),
 
-  get: (id: string) =>
-    axiosClient.get<ApiResponse<Note>>(API_ENDPOINTS.notes.detail(id)),
+  get: (id: string) => axiosClient.get<Note>(API_ENDPOINTS.notes.detail(id)),
 
   update: (id: string, data: Partial<Note>) =>
-    axiosClient.patch<ApiResponse<Note>>(API_ENDPOINTS.notes.update(id), data),
+    axiosClient.patch<Note>(API_ENDPOINTS.notes.update(id), data),
 
-  delete: (id: string) =>
-    axiosClient.delete<ApiResponse<void>>(API_ENDPOINTS.notes.delete(id)),
+  delete: (id: string) => axiosClient.delete(API_ENDPOINTS.notes.delete(id)),
 
-  list: () => axiosClient.get<ApiResponse<Note[]>>(API_ENDPOINTS.notes.list()),
+  list: () => axiosClient.get<Note[]>(API_ENDPOINTS.notes.list()),
 
   applyOperations: (operations: unknown[]) =>
-    axiosClient.post<ApiResponse<void>>(API_ENDPOINTS.notes.operations(), {
-      operations,
-    }),
+    axiosClient.post(API_ENDPOINTS.notes.operations(), { operations }),
 };
