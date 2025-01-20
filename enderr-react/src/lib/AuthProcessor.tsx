@@ -7,21 +7,7 @@ import {
   initializeAuthAtom,
 } from '@/store/auth';
 import { useEffect } from 'react';
-
-/**
- * Loading spinner component
- * @remarks Simple loading indicator for auth state transitions
- */
-function LoadingSpinner({ message }: { message: string }) {
-  return (
-    <div className='flex min-h-[calc(100vh-8rem)] items-center justify-center'>
-      <div className='text-center'>
-        <div className='mb-2 h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent' />
-        <p className='text-sm text-muted-foreground'>{message}</p>
-      </div>
-    </div>
-  );
-}
+import LoadingSpinner from '@/components/LoadingSpinner';
 
 /**
  * Protected route wrapper component
@@ -33,7 +19,7 @@ function LoadingSpinner({ message }: { message: string }) {
  *   - When authenticated: Shows protected routes
  *   - When not authenticated: Shows public routes (signin)
  */
-export default function RootRoute() {
+export default function AuthProcessor() {
   const isAuthenticated = useAtomValue(isAuthenticatedAtom);
   const [loadingState, setLoadingState] = useAtom(loadingStateAtom);
   const initialize = useSetAtom(initializeAuthAtom);

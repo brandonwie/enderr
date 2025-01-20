@@ -129,7 +129,7 @@ export default function SignInForm() {
   }, []);
 
   return (
-    <div className='flex h-screen w-screen items-center justify-center bg-indigo-400/50'>
+    <div className='flex w-screen h-screen justify-center items-center'>
       <Card className='w-[350px]'>
         <CardHeader>
           <CardTitle>Enderr, your last calendar</CardTitle>
