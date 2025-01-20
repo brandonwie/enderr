@@ -12,7 +12,7 @@ export default function RootLayout() {
   return (
     <div className='min-h-screen bg-background'>
       <Header />
-      <main className='container py-6'>
+      <main className='w-full py-6'>
         <Outlet />
       </main>
     </div>

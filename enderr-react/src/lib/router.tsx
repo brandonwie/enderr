@@ -1,18 +1,17 @@
 import { Navigate, createBrowserRouter } from 'react-router-dom';
-import AuthProcessor from '@/lib/AuthProcessor';
+import AuthProcessor from '@/lib/auth-processor';
 import SignInPage from '@/pages/signin';
-import MainPage from '@/pages/main';
 import RootLayout from '@/components/layout/root-layout';
-import MainLayout from '@/components/layout/main-layout';
+import CalendarLayout from '@/components/layout/calendar-layout';
 
 /**
  * Router configuration
  * @remarks
  * - AuthProcessor is the top-level component handling auth state
  * - RootLayout provides the layout for authenticated pages with header
- * - MainLayout provides the layout for main page and its children with inbox sidebar
+ * - CalendarLayout provides the calendar view with inbox sidebar
  * - Public routes (signin) are rendered directly under AuthProcessor
- * - Protected routes (main and its children) are rendered under RootLayout
+ * - Protected routes are rendered under RootLayout
  */
 export const router = createBrowserRouter([
   {
@@ -27,13 +26,10 @@ export const router = createBrowserRouter([
         element: <RootLayout />,
         children: [
           {
-            element: <MainLayout />,
+            path: '/',
+            element: <CalendarLayout />,
             children: [
-              {
-                index: true,
-                element: <MainPage />,
-              },
-              // TODO: Add other authenticated routes here (e.g., /calendar, /settings)
+              // TODO: Add calendar-related routes here (e.g., /calendar/:date, /settings)
             ],
           },
         ],

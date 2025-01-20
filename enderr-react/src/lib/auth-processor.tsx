@@ -7,7 +7,7 @@ import {
   initializeAuthAtom,
 } from '@/store/auth';
 import { useEffect } from 'react';
-import LoadingSpinner from '@/components/LoadingSpinner';
+import LoadingSpinner from '@/components/loading-spinner';
 
 /**
  * Protected route wrapper component
