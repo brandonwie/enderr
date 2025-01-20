@@ -8,7 +8,11 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+<<<<<<< HEAD:enderr-react/src/pages/signin.tsx
 import logger from '@/lib/logger';
+=======
+import { useAuth } from '@/contexts/auth-context';
+>>>>>>> parent of 6b438b9 (wip: fixing):enderr-next/src/app/signin/sign-in-form.tsx
 
 // Enhanced type declarations for Google Identity Services
 declare global {

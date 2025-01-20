@@ -70,15 +70,80 @@ export default function CalendarLayout() {
     });
   }, []);
 
+  // Handle drag start from inbox
+  const handleInboxDragStart = useCallback(
+    (schedule: OptimisticSchedule, e: React.DragEvent) => {
+      console.log('Drag start from inbox'); // Debug
+      e.preventDefault();
+
+      // Create and use an invisible element as drag image
+      const dragImage = document.createElement('div');
+      dragImage.style.position = 'absolute';
+      dragImage.style.top = '-9999px';
+      dragImage.style.opacity = '0';
+      document.body.appendChild(dragImage);
+      e.dataTransfer.setDragImage(dragImage, 0, 0);
+      e.dataTransfer.effectAllowed = 'move';
+
+      // Clean up
+      requestAnimationFrame(() => document.body.removeChild(dragImage));
+
+      setDraggedSchedule(schedule);
+      setDragType(DragItemType.INBOX);
+    },
+    []
+  );
+
+  // Handle drag start from calendar
+  const handleCalendarDragStart = useCallback(
+    (schedule: Schedule, e: React.DragEvent) => {
+      e.preventDefault(); // Prevent default drag behavior
+
+      // Create and use an invisible element as drag image
+      const dragImage = document.createElement('div');
+      dragImage.style.position = 'absolute';
+      dragImage.style.top = '-9999px';
+      dragImage.style.opacity = '0';
+      document.body.appendChild(dragImage);
+      e.dataTransfer.setDragImage(dragImage, 0, 0);
+      e.dataTransfer.effectAllowed = 'move';
+
+      // Clean up
+      requestAnimationFrame(() => document.body.removeChild(dragImage));
+
+      setDraggedSchedule(schedule);
+      setDragType(DragItemType.SCHEDULE);
+    },
+    []
+  );
+
+  // Handle drag end
+  const handleDragEnd = useCallback(() => {
+    setDraggedSchedule(null);
+    setDragType(null);
+    setIsDraggingOverInbox(false);
+    setTempSchedulePosition(null);
+  }, []);
+
   // Calculate snap position based on mouse position and day column
   const calculateSnapPosition = useCallback(
     (mouseY: number, containerRect: DOMRect, dayIndex: number) => {
+      // Get the day column element
+      const dayCol = document.querySelector(
+        `#week-schedule-container > div:nth-child(${dayIndex + 1})`
+      );
+      if (!dayCol) return null;
+
+      const dayColRect = dayCol.getBoundingClientRect();
+
       // Each hour is 4rem (64px)
       const pixelsPerHour = 64;
       const pixelsPerMinute = pixelsPerHour / 60;
 
-      // Calculate minutes from top of container
-      const relativeY = mouseY - containerRect.top;
+      // Calculate minutes from top of container, accounting for scroll
+      const scrollTop =
+        document.getElementById('calendar-schedule-container')?.scrollTop || 0;
+      const relativeY = mouseY - dayColRect.top + scrollTop;
       const totalMinutes = Math.floor(relativeY / pixelsPerMinute);
 
       // Snap to 15-minute intervals
@@ -100,55 +165,17 @@ export default function CalendarLayout() {
     [weekDates]
   );
 
-  // Handle drag start from inbox
-  const handleInboxDragStart = useCallback(
-    (schedule: OptimisticSchedule, e: React.DragEvent) => {
-      // Create and use an invisible element as drag image
-      const dragImage = document.createElement('div');
-      dragImage.style.display = 'none';
-      document.body.appendChild(dragImage);
-      e.dataTransfer.setDragImage(dragImage, 0, 0);
-      // Clean up
-      requestAnimationFrame(() => document.body.removeChild(dragImage));
-
-      setDraggedSchedule(schedule);
-      setDragType(DragItemType.INBOX);
-    },
-    []
-  );
-
-  // Handle drag start from calendar
-  const handleCalendarDragStart = useCallback(
-    (schedule: Schedule, e: React.DragEvent) => {
-      // Create and use an invisible element as drag image
-      const dragImage = document.createElement('div');
-      dragImage.style.display = 'none';
-      document.body.appendChild(dragImage);
-      e.dataTransfer.setDragImage(dragImage, 0, 0);
-      // Clean up
-      requestAnimationFrame(() => document.body.removeChild(dragImage));
-
-      setDraggedSchedule(schedule);
-      setDragType(DragItemType.SCHEDULE);
-    },
-    []
-  );
-
-  // Handle drag end
-  const handleDragEnd = useCallback(() => {
-    setDraggedSchedule(null);
-    setDragType(null);
-    setIsDraggingOverInbox(false);
-    setTempSchedulePosition(null);
-  }, []);
-
   // Handle drag over calendar
   const handleCalendarDragOver = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
+      console.log('Drag over calendar'); // Debug
       e.preventDefault();
       if (!draggedSchedule) return;
 
-      const containerRect = e.currentTarget.getBoundingClientRect();
+      const weekContainer = document.getElementById('week-schedule-container');
+      if (!weekContainer) return;
+
+      const containerRect = weekContainer.getBoundingClientRect();
       const columnWidth = containerRect.width / 7;
       const dayIndex = Math.floor(
         (e.clientX - containerRect.left) / columnWidth
@@ -156,16 +183,17 @@ export default function CalendarLayout() {
 
       if (dayIndex < 0 || dayIndex > 6) return;
 
-      const { date, top } = calculateSnapPosition(
+      const snapPosition = calculateSnapPosition(
         e.clientY,
         containerRect,
         dayIndex
       );
 
+      if (!snapPosition) return;
+      console.log('New position:', snapPosition); // Debug
+
       setTempSchedulePosition({
-        date,
-        dayIndex,
-        top,
+        ...snapPosition,
         height: `${(draggedSchedule.duration * 64) / 60}px`,
       });
     },
@@ -283,7 +311,10 @@ export default function CalendarLayout() {
       </aside>
 
       {/* Calendar View */}
-      <div id='calendar-view' className='grow flex flex-col w-0 min-w-0'>
+      <div
+        id='calendar-view'
+        className='grow flex flex-col w-0 min-w-0 relative'
+      >
         {/* Calendar Header */}
         <div
           id='calendar-header-container'
@@ -377,33 +408,38 @@ export default function CalendarLayout() {
                   ))}
               </div>
             ))}
-
-            {/* Moving Schedule Preview */}
-            {draggedSchedule && tempSchedulePosition && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: tempSchedulePosition.top,
-                  left: `${tempSchedulePosition.dayIndex * (100 / 7)}%`,
-                  width: `${100 / 7}%`,
-                  height: tempSchedulePosition.height,
-                  pointerEvents: 'none',
-                  zIndex: 50,
-                }}
-              >
-                <MovingSchedule
-                  schedule={draggedSchedule}
-                  currentDate={tempSchedulePosition.date}
-                  isOverInbox={isDraggingOverInbox}
-                  style={{
-                    position: 'absolute',
-                    inset: '0 5%',
-                  }}
-                />
-              </div>
-            )}
           </div>
         </div>
+
+        {/* Moving Schedule Preview - Moved outside the grid */}
+        {draggedSchedule && tempSchedulePosition && (
+          <div
+            style={{
+              position: 'absolute',
+              top: `calc(${tempSchedulePosition.top} + 6rem)`, // Account for header height
+              left: `calc(4rem + ${tempSchedulePosition.dayIndex * (100 / 7)}%)`, // Account for time column
+              width: `${100 / 7}%`,
+              height: tempSchedulePosition.height,
+              pointerEvents: 'none',
+              zIndex: 1000,
+            }}
+          >
+            <MovingSchedule
+              schedule={draggedSchedule}
+              currentDate={tempSchedulePosition.date}
+              isOverInbox={isDraggingOverInbox}
+              style={{
+                position: 'absolute',
+                inset: '0 5%',
+                backgroundColor: 'white',
+                border: '2px dashed #4f46e5',
+                borderRadius: '0.375rem',
+                opacity: 0.8,
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+              }}
+            />
+          </div>
+        )}
 
         <Outlet />
       </div>
