@@ -18,9 +18,14 @@ import { DragItemType, ScheduleStatus } from '@shared/types/schedule';
 import { useAtom } from 'jotai';
 
 import { Calendar } from '@/components/calendar';
+<<<<<<< HEAD
 import { InboxSchedule } from '@/components/inbox/inbox-schedule';
 import { ScheduleCell } from '@/components/schedule/schedule-cell';
 import type { ScheduleFormValues } from '@/components/schedule/schedule-form';
+=======
+import { InboxSchedule } from '@/components/inbox-schedule';
+import { ScheduleCell } from '@/components/schedule-cell';
+>>>>>>> parent of 103ac90 (Resolve minor issues)
 import { Sidebar } from '@/components/sidebar';
 import {
   dispatchInboxItemDropped,

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ScheduleStatus } from '@shared/types/schedule';
 import { X } from 'lucide-react';
 
-import { ScheduleForm } from '@/components/schedule/schedule-form';
+import { ScheduleForm } from '@/components/schedule-form';
 import { Button } from '@/components/ui/button';
 
 interface InboxItemPageProps {

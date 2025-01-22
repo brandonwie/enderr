@@ -9,40 +9,6 @@ import { atomWithStorage } from 'jotai/utils';
 
 import { apiClient, API_ENDPOINTS } from '@/lib/api-client';
 
-// Add Google Identity Services type definitions
-declare global {
-  interface Window {
-    google: {
-      accounts: {
-        id: {
-          initialize: (config: {
-            client_id: string;
-            callback: (response: { credential: string }) => void;
-            auto_select?: boolean;
-            use_fedcm_for_prompt?: boolean;
-          }) => void;
-          renderButton: (
-            parent: HTMLElement,
-            options: {
-              type?: 'standard' | 'icon';
-              theme?: 'outline' | 'filled';
-              size?: 'large' | 'medium' | 'small';
-              text?: 'signin_with' | 'signup_with' | 'continue_with' | 'signin';
-              shape?: 'rectangular' | 'pill' | 'circle' | 'square';
-              logo_alignment?: 'left' | 'center';
-              width?: number;
-              locale?: string;
-            },
-          ) => void;
-          prompt: () => void;
-          disableAutoSelect: () => void;
-          revoke: (email: string, callback: () => void) => void;
-        };
-      };
-    };
-  }
-}
-
 interface AuthUser {
   id: string;
   email: string;
@@ -140,8 +106,7 @@ export function useAuth() {
    */
   const signOut = useCallback(async () => {
     clearTokens();
-    await router.push('/signin');
-    window.location.reload();
+    router.push('/signin');
   }, [router, clearTokens]);
 
   /**

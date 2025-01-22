@@ -1,5 +1,7 @@
 'use client';
 
+import { useState, useEffect } from 'react';
+
 import { useTheme } from 'next-themes';
 
 import { LogOut, Moon, Sun } from 'lucide-react';
@@ -13,7 +15,13 @@ import { useAuth } from '@/contexts/auth-context';
  */
 export function Header() {
   const { user, signOut } = useAuth();
-  const { resolvedTheme, setTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
+  // to resolve string hydration mismatch
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
     <header className="sticky top-0 z-10 w-full border-b bg-background/95 px-16 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -34,16 +42,17 @@ export function Header() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() =>
-              setTheme(resolvedTheme === 'light' ? 'dark' : 'light')
-            }
+            onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+            disabled={!mounted}
             title={
-              resolvedTheme === 'light'
-                ? 'Switch to dark mode'
-                : 'Switch to light mode'
+              mounted
+                ? theme === 'light'
+                  ? 'Switch to dark mode'
+                  : 'Switch to light mode'
+                : 'Loading theme...'
             }
           >
-            {resolvedTheme === 'light' ? (
+            {mounted && theme === 'light' ? (
               <Moon className="h-5 w-5" />
             ) : (
               <Sun className="h-5 w-5" />

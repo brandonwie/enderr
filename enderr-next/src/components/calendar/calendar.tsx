@@ -15,10 +15,16 @@ import { ScheduleStatus } from '@shared/types/schedule';
 import { isSameDay } from 'date-fns';
 import { useAtom, useAtomValue } from 'jotai';
 
+<<<<<<< HEAD
 import { useScheduleActions } from '@/components/schedule/schedule-actions';
 import { ScheduleCell } from '@/components/schedule/schedule-cell';
 import { ScheduleForm } from '@/components/schedule/schedule-form';
 import type { ScheduleFormValues } from '@/components/schedule/schedule-form';
+=======
+import { useScheduleActions } from '@/components/schedule-actions';
+import { ScheduleCell } from '@/components/schedule-cell';
+import { ScheduleForm } from '@/components/schedule-form';
+>>>>>>> parent of 103ac90 (Resolve minor issues)
 import {
   Popover,
   PopoverContent,
